@@ -1,6 +1,14 @@
 # HabitGate
 
-FrictionGate と同じく、Android ローカルで動かして GitHub Actions で APK を作るための小さな習慣形成アプリです。
+Android ローカル用の習慣形成・振り返り用アプリです。 
+
+## ダウンロード
+
+Androidスマホに直接インストールする場合は、以下からAPKをダウンロードしてください。
+
+[APKをダウンロード](https://github.com/beelip/HabitGate/raw/refs/heads/main/build/app-debug.apk)
+
+※ Playストア経由ではないため、インストール時に「不明なアプリのインストールを許可」が必要になる場合があります。
 
 ## できること
 
