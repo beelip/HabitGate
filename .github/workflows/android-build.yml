@@ -35,8 +35,15 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Normalize APK name
+        run: |
+          mkdir -p build-artifacts
+          APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" build-artifacts/habit-gate.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HabitGate-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: habit-gate-apk
+          path: build-artifacts/habit-gate.apk

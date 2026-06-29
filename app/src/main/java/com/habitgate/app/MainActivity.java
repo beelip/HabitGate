@@ -20,17 +20,18 @@ import android.widget.Toast;
 
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class MainActivity extends android.app.Activity {
+    private static final int REQUEST_BACKUP_DIRECTORY = 201;
+    private static final int REQUEST_IMPORT_CSV = 202;
+
     private HabitDb db;
     private LinearLayout doList;
     private LinearLayout reduceList;
     private TextView cycleInfo;
+    private TextView backupInfo;
     private Button reminderButton;
     private EditText webhookEdit;
     private EditText addDoTitle;
@@ -139,6 +140,25 @@ public class MainActivity extends android.app.Activity {
         export.setOnClickListener(v -> exportCsv());
         root.addView(export);
 
+        root.addView(Ui.section(this, "CSVバックアップ / 移行"));
+        backupInfo = new TextView(this);
+        backupInfo.setTextSize(14);
+        backupInfo.setPadding(0, 0, 0, Ui.dp(this, 8));
+        root.addView(backupInfo);
+
+        Button chooseBackupDir = Ui.button(this, "CSV更新先フォルダを選択");
+        chooseBackupDir.setOnClickListener(v -> chooseBackupDirectory());
+        root.addView(chooseBackupDir);
+
+        Button updateBackup = Ui.button(this, "指定フォルダのCSVを今すぐ更新");
+        updateBackup.setOnClickListener(v -> updateConfiguredCsvBackup(true));
+        root.addView(updateBackup);
+
+        Button importCsv = Ui.button(this, "CSVからインポート");
+        importCsv.setOnClickListener(v -> openCsvImporter());
+        root.addView(importCsv);
+        root.addView(Ui.note(this, "インポートは現在のアプリ内データをCSVの内容で置き換えます。移行前にCSV出力しておくと安全です。"));
+
         setContentView(scroll);
         refreshLists();
     }
@@ -178,14 +198,18 @@ public class MainActivity extends android.app.Activity {
         Models.Cycle next = db.endCurrentCycleAndStartNext();
         ReminderScheduler.scheduleNext(this);
         SheetsSync.syncUnsynced(this, false);
+        String backupMessage = updateConfiguredCsvBackup(false);
         refreshLists();
-        Toast.makeText(this, "一日を終了しました。次の対象日: " + next.cycleDate, Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "一日を終了しました。次の対象日: " + next.cycleDate + backupMessage, Toast.LENGTH_LONG).show();
     }
 
     private void refreshLists() {
         if (doList == null || reduceList == null) return;
         Models.Cycle cycle = db.getCurrentCycle();
         cycleInfo.setText("対象日: " + cycle.cycleDate + "\n開始: " + DateTools.formatDateTime(cycle.startAt));
+        if (backupInfo != null) {
+            backupInfo.setText("自動CSV更新先: " + CsvBackupManager.backupDirectoryLabel(this) + "\nファイル名: " + CsvBackupManager.BACKUP_FILE_NAME);
+        }
 
         doList.removeAllViews();
         List<Models.Task> tasks = db.getActiveDoTasks();
@@ -238,35 +262,7 @@ public class MainActivity extends android.app.Activity {
 
     private void exportCsv() {
         try {
-            List<Models.Record> records = db.getAllRecords();
-            List<Models.Cycle> cycles = db.getAllCycles();
-            StringBuilder sb = new StringBuilder();
-            sb.append("# records\n");
-            sb.append("category,title,note,duration_minutes,duration_hhmm,actual_date,created_at,synced\n");
-            DateTimeFormatter formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-            for (Models.Record r : records) {
-                String created = Instant.ofEpochMilli(r.createdAt).atZone(ZoneId.systemDefault()).format(formatter);
-                sb.append(csv(r.category)).append(',')
-                        .append(csv(r.title)).append(',')
-                        .append(csv(r.note)).append(',')
-                        .append(r.durationMinutes).append(',')
-                        .append(csv(DateTools.formatMinutes(r.durationMinutes))).append(',')
-                        .append(csv(r.actualDate)).append(',')
-                        .append(csv(created)).append(',')
-                        .append(r.synced ? "1" : "0")
-                        .append('\n');
-            }
-            sb.append("\n# cycles\n");
-            sb.append("cycle_date,start_at,end_at,closed,synced\n");
-            for (Models.Cycle c : cycles) {
-                sb.append(csv(c.cycleDate)).append(',')
-                        .append(csv(DateTools.formatDateTime(c.startAt))).append(',')
-                        .append(csv(DateTools.formatDateTime(c.endAt))).append(',')
-                        .append(c.closed ? "1" : "0").append(',')
-                        .append(c.synced ? "1" : "0")
-                        .append('\n');
-            }
-
+            String csv = CsvBackupManager.buildBackupCsv(this);
             String fileName = "habit_gate_export_" + LocalDate.now() + ".csv";
             ContentResolver resolver = getContentResolver();
             ContentValues values = new ContentValues();
@@ -278,7 +274,7 @@ public class MainActivity extends android.app.Activity {
             try (OutputStream os = resolver.openOutputStream(uri)) {
                 if (os == null) throw new IllegalStateException("CSV output stream could not be opened");
                 os.write(new byte[]{(byte)0xEF, (byte)0xBB, (byte)0xBF});
-                os.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+                os.write(csv.getBytes(StandardCharsets.UTF_8));
             }
             values.clear();
             values.put(MediaStore.Downloads.IS_PENDING, 0);
@@ -294,9 +290,60 @@ public class MainActivity extends android.app.Activity {
         }
     }
 
-    private String csv(String raw) {
-        if (raw == null) return "";
-        String escaped = raw.replace("\"", "\"\"");
-        return "\"" + escaped + "\"";
+    private void chooseBackupDirectory() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_BACKUP_DIRECTORY);
     }
+
+    private void openCsvImporter() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"text/*", "text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream"});
+        startActivityForResult(intent, REQUEST_IMPORT_CSV);
+    }
+
+    private String updateConfiguredCsvBackup(boolean showToast) {
+        if (!CsvBackupManager.hasBackupDirectory(this)) {
+            if (showToast) Toast.makeText(this, "CSV更新先フォルダが未設定です", Toast.LENGTH_LONG).show();
+            return " / CSV自動更新: 未設定";
+        }
+        try {
+            CsvBackupManager.writeBackupToConfiguredDirectory(this);
+            if (showToast) Toast.makeText(this, "指定フォルダのCSVを更新しました", Toast.LENGTH_LONG).show();
+            return " / CSV自動更新: 完了";
+        } catch (Exception e) {
+            if (showToast) Toast.makeText(this, "CSV更新に失敗: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return " / CSV自動更新: 失敗";
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        if (requestCode == REQUEST_BACKUP_DIRECTORY) {
+            try {
+                CsvBackupManager.saveBackupDirectory(this, uri, data.getFlags());
+                updateConfiguredCsvBackup(false);
+                refreshLists();
+                Toast.makeText(this, "CSV更新先フォルダを保存しました", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "フォルダ設定に失敗: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        } else if (requestCode == REQUEST_IMPORT_CSV) {
+            try {
+                int rows = CsvBackupManager.importFromCsvUri(this, uri);
+                ReminderScheduler.scheduleNext(this);
+                updateConfiguredCsvBackup(false);
+                refreshLists();
+                Toast.makeText(this, "CSVからインポートしました: " + rows + "行", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "CSVインポートに失敗: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
 }

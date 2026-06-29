@@ -17,7 +17,7 @@ adb exec-out run-as com.habitgate.app cat databases/friction_habit.db-shm > fric
 
 ```bash
 adb uninstall com.habitgate.app
-adb install app-debug.apk
+adb install habit-gate.apk
 ```
 
 ## 3. 新版を一度起動してから、DB を復元
@@ -38,7 +38,7 @@ adb shell run-as com.habitgate.app cp /sdcard/Download/friction_habit.db-shm dat
 
 ## 4. アプリを再起動
 
-新版起動時に DB バージョン `1` から `2` への移行が走り、メモ列とサイクルテーブルが追加されます。
+新版起動時に 必要に応じて DB 移行が走ります。v0.3.0 以降は、通常はアプリ内の CSV エクスポート / インポートを使う方が安全です。
 
 ## 注意
 

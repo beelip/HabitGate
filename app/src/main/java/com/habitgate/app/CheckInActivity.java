@@ -198,8 +198,24 @@ public class CheckInActivity extends android.app.Activity {
             extra = " / 次の対象日: " + next.cycleDate;
         }
         SheetsSync.syncUnsynced(this, false);
+        if (closeAfterSave) {
+            extra += updateConfiguredCsvBackupMessage();
+        }
         Toast.makeText(this, "保存しました: 実績" + records + "件 / 完了" + completed + "件" + extra, Toast.LENGTH_LONG).show();
         finish();
+    }
+
+
+    private String updateConfiguredCsvBackupMessage() {
+        if (!CsvBackupManager.hasBackupDirectory(this)) {
+            return " / CSV自動更新: 未設定";
+        }
+        try {
+            CsvBackupManager.writeBackupToConfiguredDirectory(this);
+            return " / CSV自動更新: 完了";
+        } catch (Exception e) {
+            return " / CSV自動更新: 失敗";
+        }
     }
 
     private String mergeNotes(String itemNote, String actualNote) {
