@@ -1,7 +1,6 @@
 package com.habitgate.app;
 
 import android.Manifest;
-import android.app.AlarmManager;
 import android.app.TimePickerDialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -12,8 +11,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.InputType;
-import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -33,8 +30,13 @@ public class MainActivity extends android.app.Activity {
     private HabitDb db;
     private LinearLayout doList;
     private LinearLayout reduceList;
+    private TextView cycleInfo;
     private Button reminderButton;
     private EditText webhookEdit;
+    private EditText addDoTitle;
+    private EditText addDoNote;
+    private EditText addReduceTitle;
+    private EditText addReduceNote;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +63,21 @@ public class MainActivity extends android.app.Activity {
         root.addView(Ui.title(this, "HabitGate"));
         root.addView(Ui.note(this, "指定時刻に『今日は何をした？』を出し、やること／減らすことを記録します。"));
 
+        root.addView(Ui.section(this, "現在のサイクル"));
+        cycleInfo = new TextView(this);
+        cycleInfo.setTextSize(15);
+        cycleInfo.setPadding(0, 0, 0, Ui.dp(this, 8));
+        root.addView(cycleInfo);
+
+        Button checkIn = Ui.button(this, "この日の入力を開く");
+        checkIn.setOnClickListener(v -> startActivity(new Intent(this, CheckInActivity.class)));
+        root.addView(checkIn);
+
+        Button closeDay = Ui.button(this, "この日を終わらせて次の日へ");
+        closeDay.setOnClickListener(v -> closeCurrentCycle());
+        root.addView(closeDay);
+        root.addView(Ui.note(this, "通知時刻を待たずに一日を閉じられます。未完了のやることは次の対象日に繰り越されます。"));
+
         root.addView(Ui.section(this, "通知時刻"));
         reminderButton = Ui.button(this, "通知時刻: " + ReminderScheduler.reminderTime(this));
         reminderButton.setOnClickListener(v -> openTimePicker());
@@ -71,38 +88,31 @@ public class MainActivity extends android.app.Activity {
         root.addView(exactAlarmButton);
         root.addView(Ui.note(this, "Android の制限により、画面を完全に前面へ出せない機種があります。その場合は高優先度通知から入力画面を開いてください。"));
 
-        root.addView(Ui.section(this, "明日のやることを追加"));
-        LinearLayout addDoRow = Ui.horizontal(this);
-        EditText addDoEdit = Ui.edit(this, "例: 30分走る / PM過去問1問");
-        addDoRow.addView(addDoEdit, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button addDoButton = Ui.button(this, "追加");
-        addDoRow.addView(addDoButton);
-        root.addView(addDoRow);
-        addDoButton.setOnClickListener(v -> {
-            String title = addDoEdit.getText().toString().trim();
-            if (title.isEmpty()) return;
-            db.addDoTask(title, DateTools.tomorrow());
-            addDoEdit.setText("");
-            refreshLists();
-        });
+        root.addView(Ui.section(this, "やることを追加"));
+        addDoTitle = Ui.edit(this, "例: 30分走る / PM過去問1問");
+        addDoNote = Ui.edit(this, "メモ（任意）");
+        root.addView(addDoTitle);
+        root.addView(addDoNote);
+        LinearLayout addDoButtons = Ui.horizontal(this);
+        Button addDoToday = Ui.button(this, "当日に追加");
+        addDoToday.setOnClickListener(v -> addDoTask(false));
+        Button addDoNext = Ui.button(this, "次の日に追加");
+        addDoNext.setOnClickListener(v -> addDoTask(true));
+        addDoButtons.addView(addDoToday, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        addDoButtons.addView(addDoNext, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        root.addView(addDoButtons);
 
         doList = Ui.vertical(this);
         root.addView(doList);
 
         root.addView(Ui.section(this, "減らすことを追加"));
-        LinearLayout addReduceRow = Ui.horizontal(this);
-        EditText addReduceEdit = Ui.edit(this, "例: Twitter / 夜更かし / 食べ過ぎ");
-        addReduceRow.addView(addReduceEdit, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        addReduceTitle = Ui.edit(this, "例: Twitter / 夜更かし / 食べ過ぎ");
+        addReduceNote = Ui.edit(this, "メモ（任意）");
+        root.addView(addReduceTitle);
+        root.addView(addReduceNote);
         Button addReduceButton = Ui.button(this, "追加");
-        addReduceRow.addView(addReduceButton);
-        root.addView(addReduceRow);
-        addReduceButton.setOnClickListener(v -> {
-            String title = addReduceEdit.getText().toString().trim();
-            if (title.isEmpty()) return;
-            db.addReduceItem(title);
-            addReduceEdit.setText("");
-            refreshLists();
-        });
+        addReduceButton.setOnClickListener(v -> addReduceItem());
+        root.addView(addReduceButton);
 
         reduceList = Ui.vertical(this);
         root.addView(reduceList);
@@ -118,13 +128,9 @@ public class MainActivity extends android.app.Activity {
             Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         });
         root.addView(saveWebhook);
-        root.addView(Ui.note(this, "URLを入れると、記録保存時に未同期データを Google Sheets に送信します。設定前でもCSV出力できます。"));
+        root.addView(Ui.note(this, "URLを入れると、実績と終了済みサイクルを Google Sheets に送信します。設定前でもCSV出力できます。"));
 
         root.addView(Ui.section(this, "操作"));
-        Button checkIn = Ui.button(this, "今日の入力を開く");
-        checkIn.setOnClickListener(v -> startActivity(new Intent(this, CheckInActivity.class)));
-        root.addView(checkIn);
-
         Button stats = Ui.button(this, "集計を見る");
         stats.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
         root.addView(stats);
@@ -146,8 +152,41 @@ public class MainActivity extends android.app.Activity {
         }, current[0], current[1], true).show();
     }
 
+    private void addDoTask(boolean nextCycle) {
+        String title = addDoTitle.getText().toString().trim();
+        if (title.isEmpty()) return;
+        Models.Cycle cycle = db.getCurrentCycle();
+        String plannedDate = nextCycle ? DateTools.nextDay(cycle.cycleDate) : cycle.cycleDate;
+        db.addDoTask(title, addDoNote.getText().toString(), plannedDate);
+        addDoTitle.setText("");
+        addDoNote.setText("");
+        refreshLists();
+        Toast.makeText(this, plannedDate + " に追加しました", Toast.LENGTH_SHORT).show();
+    }
+
+    private void addReduceItem() {
+        String title = addReduceTitle.getText().toString().trim();
+        if (title.isEmpty()) return;
+        db.addReduceItem(title, addReduceNote.getText().toString());
+        addReduceTitle.setText("");
+        addReduceNote.setText("");
+        refreshLists();
+        Toast.makeText(this, "追加しました", Toast.LENGTH_SHORT).show();
+    }
+
+    private void closeCurrentCycle() {
+        Models.Cycle next = db.endCurrentCycleAndStartNext();
+        ReminderScheduler.scheduleNext(this);
+        SheetsSync.syncUnsynced(this, false);
+        refreshLists();
+        Toast.makeText(this, "一日を終了しました。次の対象日: " + next.cycleDate, Toast.LENGTH_LONG).show();
+    }
+
     private void refreshLists() {
         if (doList == null || reduceList == null) return;
+        Models.Cycle cycle = db.getCurrentCycle();
+        cycleInfo.setText("対象日: " + cycle.cycleDate + "\n開始: " + DateTools.formatDateTime(cycle.startAt));
+
         doList.removeAllViews();
         List<Models.Task> tasks = db.getActiveDoTasks();
         if (tasks.isEmpty()) {
@@ -156,7 +195,9 @@ public class MainActivity extends android.app.Activity {
             for (Models.Task t : tasks) {
                 LinearLayout row = Ui.horizontal(this);
                 TextView tv = new TextView(this);
-                tv.setText(t.plannedDate + "  " + t.title);
+                String text = t.plannedDate + "  " + t.title;
+                if (!t.note.isEmpty()) text += "\nメモ: " + t.note;
+                tv.setText(text);
                 tv.setTextSize(15);
                 row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
                 Button del = Ui.button(this, "削除");
@@ -175,7 +216,9 @@ public class MainActivity extends android.app.Activity {
             for (Models.ReduceItem item : items) {
                 LinearLayout row = Ui.horizontal(this);
                 TextView tv = new TextView(this);
-                tv.setText(item.title);
+                String text = item.title;
+                if (!item.note.isEmpty()) text += "\nメモ: " + item.note;
+                tv.setText(text);
                 tv.setTextSize(15);
                 row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
                 Button del = Ui.button(this, "削除");
@@ -196,13 +239,16 @@ public class MainActivity extends android.app.Activity {
     private void exportCsv() {
         try {
             List<Models.Record> records = db.getAllRecords();
+            List<Models.Cycle> cycles = db.getAllCycles();
             StringBuilder sb = new StringBuilder();
-            sb.append("category,title,duration_minutes,duration_hhmm,actual_date,created_at,synced\n");
+            sb.append("# records\n");
+            sb.append("category,title,note,duration_minutes,duration_hhmm,actual_date,created_at,synced\n");
             DateTimeFormatter formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
             for (Models.Record r : records) {
                 String created = Instant.ofEpochMilli(r.createdAt).atZone(ZoneId.systemDefault()).format(formatter);
                 sb.append(csv(r.category)).append(',')
                         .append(csv(r.title)).append(',')
+                        .append(csv(r.note)).append(',')
                         .append(r.durationMinutes).append(',')
                         .append(csv(DateTools.formatMinutes(r.durationMinutes))).append(',')
                         .append(csv(r.actualDate)).append(',')
@@ -210,8 +256,18 @@ public class MainActivity extends android.app.Activity {
                         .append(r.synced ? "1" : "0")
                         .append('\n');
             }
+            sb.append("\n# cycles\n");
+            sb.append("cycle_date,start_at,end_at,closed,synced\n");
+            for (Models.Cycle c : cycles) {
+                sb.append(csv(c.cycleDate)).append(',')
+                        .append(csv(DateTools.formatDateTime(c.startAt))).append(',')
+                        .append(csv(DateTools.formatDateTime(c.endAt))).append(',')
+                        .append(c.closed ? "1" : "0").append(',')
+                        .append(c.synced ? "1" : "0")
+                        .append('\n');
+            }
 
-            String fileName = "friction_habit_records_" + LocalDate.now() + ".csv";
+            String fileName = "habit_gate_export_" + LocalDate.now() + ".csv";
             ContentResolver resolver = getContentResolver();
             ContentValues values = new ContentValues();
             values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);

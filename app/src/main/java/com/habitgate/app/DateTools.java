@@ -1,12 +1,15 @@
 package com.habitgate.app;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 public final class DateTools {
     public static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
+    public static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private DateTools() {}
 
@@ -29,6 +32,12 @@ public final class DateTools {
 
     public static String startOfMonth() {
         return LocalDate.now().withDayOfMonth(1).format(DATE);
+    }
+
+    public static String maxDate(String left, String right) {
+        if (left == null || left.isEmpty()) return right;
+        if (right == null || right.isEmpty()) return left;
+        return left.compareTo(right) >= 0 ? left : right;
     }
 
     public static String formatMinutes(int minutes) {
@@ -65,5 +74,10 @@ public final class DateTools {
         } catch (Exception e) {
             return new int[]{fallbackHour, fallbackMinute};
         }
+    }
+
+    public static String formatDateTime(long epochMillis) {
+        if (epochMillis <= 0) return "";
+        return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(DATE_TIME);
     }
 }

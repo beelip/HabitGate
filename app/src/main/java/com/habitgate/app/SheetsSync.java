@@ -24,7 +24,8 @@ public final class SheetsSync {
         new Thread(() -> {
             HabitDb db = new HabitDb(app);
             List<Models.Record> records = db.getUnsyncedRecords();
-            if (records.isEmpty()) {
+            List<Models.Cycle> cycles = db.getUnsyncedClosedCycles();
+            if (records.isEmpty() && cycles.isEmpty()) {
                 postToast(app, showToast ? "未同期データはありません" : null);
                 return;
             }
@@ -33,6 +34,7 @@ public final class SheetsSync {
                 JSONObject body = new JSONObject();
                 body.put("source", "HabitGate");
                 body.put("records", db.recordsToJson(records));
+                body.put("cycles", db.cyclesToJson(cycles));
                 byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
 
                 conn = (HttpURLConnection) new URL(url.trim()).openConnection();
@@ -46,10 +48,15 @@ public final class SheetsSync {
                 }
                 int code = conn.getResponseCode();
                 if (code >= 200 && code < 300) {
-                    ArrayList<Long> ids = new ArrayList<>();
-                    for (Models.Record r : records) ids.add(r.id);
-                    db.markSynced(ids);
-                    postToast(app, showToast ? "Sheets 同期完了: " + records.size() + "件" : null);
+                    ArrayList<Long> recordIds = new ArrayList<>();
+                    for (Models.Record r : records) recordIds.add(r.id);
+                    db.markSynced(recordIds);
+
+                    ArrayList<Long> cycleIds = new ArrayList<>();
+                    for (Models.Cycle c : cycles) cycleIds.add(c.id);
+                    db.markCyclesSynced(cycleIds);
+
+                    postToast(app, showToast ? "Sheets 同期完了: 実績" + records.size() + "件 / サイクル" + cycles.size() + "件" : null);
                 } else {
                     postToast(app, showToast ? "Sheets 同期失敗: HTTP " + code : null);
                 }

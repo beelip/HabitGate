@@ -6,7 +6,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public class StatsActivity extends android.app.Activity {
@@ -30,7 +29,7 @@ public class StatsActivity extends android.app.Activity {
         scroll.addView(root);
 
         root.addView(Ui.title(this, "集計"));
-        root.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。"));
+        root.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。サイクルの開始・終了時刻も確認できます。"));
 
         LinearLayout buttons = Ui.horizontal(this);
         Button day = Ui.button(this, "今日");
@@ -54,11 +53,14 @@ public class StatsActivity extends android.app.Activity {
 
     private void refresh() {
         String today = DateTools.today();
+        Models.Cycle active = db.getCurrentCycle();
+        String to = DateTools.maxDate(today, active.cycleDate);
         String from;
         String label;
         if ("day".equals(mode)) {
-            from = today;
-            label = "今日";
+            from = active.cycleDate;
+            to = active.cycleDate;
+            label = "現在の対象日";
         } else if ("month".equals(mode)) {
             from = DateTools.startOfMonth();
             label = "今月";
@@ -67,9 +69,10 @@ public class StatsActivity extends android.app.Activity {
             label = "今週";
         }
 
-        List<Models.DayTotal> totals = db.getDayTotals(from, today);
+        List<Models.DayTotal> totals = db.getDayTotals(from, to);
         chart.setTotals(totals);
-        List<Models.Record> records = db.getRecords(from, today);
+        List<Models.Record> records = db.getRecords(from, to);
+        List<Models.Cycle> cycles = db.getCycles(from, to);
         list.removeAllViews();
         list.addView(Ui.section(this, label + "の記録"));
 
@@ -86,26 +89,41 @@ public class StatsActivity extends android.app.Activity {
         list.addView(summary);
 
         if (records.isEmpty()) {
-            list.addView(Ui.note(this, "まだ記録がありません。"));
-            return;
+            list.addView(Ui.note(this, "この期間の実績記録はまだありません。"));
+        } else {
+            String currentDate = "";
+            for (Models.Record r : records) {
+                if (!currentDate.equals(r.actualDate)) {
+                    currentDate = r.actualDate;
+                    TextView date = new TextView(this);
+                    date.setText(currentDate);
+                    date.setTextSize(17);
+                    date.setPadding(0, Ui.dp(this, 14), 0, Ui.dp(this, 4));
+                    list.addView(date);
+                }
+                TextView row = new TextView(this);
+                String category = HabitDb.CATEGORY_DO.equals(r.category) ? "やること" : "減らすこと";
+                String text = "・" + category + " / " + r.title + " / " + DateTools.formatMinutes(r.durationMinutes) + (r.synced ? " / 同期済" : " / 未同期");
+                if (!r.note.isEmpty()) text += "\n  メモ: " + r.note;
+                row.setText(text);
+                row.setTextSize(15);
+                row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
+                list.addView(row);
+            }
         }
 
-        String currentDate = "";
-        for (Models.Record r : records) {
-            if (!currentDate.equals(r.actualDate)) {
-                currentDate = r.actualDate;
-                TextView date = new TextView(this);
-                date.setText(currentDate);
-                date.setTextSize(17);
-                date.setPadding(0, Ui.dp(this, 14), 0, Ui.dp(this, 4));
-                list.addView(date);
+        list.addView(Ui.section(this, "サイクル履歴"));
+        if (cycles.isEmpty()) {
+            list.addView(Ui.note(this, "この期間のサイクル記録はまだありません。"));
+        } else {
+            for (Models.Cycle c : cycles) {
+                TextView row = new TextView(this);
+                String end = c.closed ? DateTools.formatDateTime(c.endAt) : "進行中";
+                row.setText("・" + c.cycleDate + " / 開始: " + DateTools.formatDateTime(c.startAt) + " / 終了: " + end + (c.synced ? " / 同期済" : " / 未同期"));
+                row.setTextSize(15);
+                row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
+                list.addView(row);
             }
-            TextView row = new TextView(this);
-            String category = HabitDb.CATEGORY_DO.equals(r.category) ? "やること" : "減らすこと";
-            row.setText("・" + category + " / " + r.title + " / " + DateTools.formatMinutes(r.durationMinutes) + (r.synced ? " / 同期済" : " / 未同期"));
-            row.setTextSize(15);
-            row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
-            list.addView(row);
         }
 
         SheetsSync.syncUnsynced(this, false);

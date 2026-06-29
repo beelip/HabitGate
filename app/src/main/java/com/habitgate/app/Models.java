@@ -7,21 +7,25 @@ public final class Models {
         public final long id;
         public final String title;
         public final String plannedDate;
+        public final String note;
 
-        public Task(long id, String title, String plannedDate) {
+        public Task(long id, String title, String plannedDate, String note) {
             this.id = id;
             this.title = title;
             this.plannedDate = plannedDate;
+            this.note = note == null ? "" : note;
         }
     }
 
     public static class ReduceItem {
         public final long id;
         public final String title;
+        public final String note;
 
-        public ReduceItem(long id, String title) {
+        public ReduceItem(long id, String title, String note) {
             this.id = id;
             this.title = title;
+            this.note = note == null ? "" : note;
         }
     }
 
@@ -29,15 +33,17 @@ public final class Models {
         public final long id;
         public final String category;
         public final String title;
+        public final String note;
         public final int durationMinutes;
         public final String actualDate;
         public final long createdAt;
         public final boolean synced;
 
-        public Record(long id, String category, String title, int durationMinutes, String actualDate, long createdAt, boolean synced) {
+        public Record(long id, String category, String title, String note, int durationMinutes, String actualDate, long createdAt, boolean synced) {
             this.id = id;
             this.category = category;
             this.title = title;
+            this.note = note == null ? "" : note;
             this.durationMinutes = durationMinutes;
             this.actualDate = actualDate;
             this.createdAt = createdAt;
@@ -54,6 +60,24 @@ public final class Models {
             this.date = date;
             this.doMinutes = doMinutes;
             this.reduceMinutes = reduceMinutes;
+        }
+    }
+
+    public static class Cycle {
+        public final long id;
+        public final String cycleDate;
+        public final long startAt;
+        public final long endAt;
+        public final boolean closed;
+        public final boolean synced;
+
+        public Cycle(long id, String cycleDate, long startAt, long endAt, boolean closed, boolean synced) {
+            this.id = id;
+            this.cycleDate = cycleDate;
+            this.startAt = startAt;
+            this.endAt = endAt;
+            this.closed = closed;
+            this.synced = synced;
         }
     }
 }
