@@ -68,8 +68,8 @@ public final class CsvBackupManager {
                 query(db, "SELECT id,title,note,planned_date,created_at,active FROM do_tasks ORDER BY id ASC"));
 
         appendSection(sb, "reduce_items",
-                "id,title,note,created_at,active",
-                query(db, "SELECT id,title,note,created_at,active FROM reduce_items ORDER BY id ASC"));
+                "id,title,note,app_package,created_at,active",
+                query(db, "SELECT id,title,note,app_package,created_at,active FROM reduce_items ORDER BY id ASC"));
 
         appendSection(sb, "records",
                 "id,category,title,note,duration_minutes,actual_date,created_at,synced",
@@ -338,6 +338,7 @@ public final class CsvBackupManager {
             putId(v, row);
             v.put("title", str(row, "title"));
             v.put("note", str(row, "note"));
+            v.put("app_package", str(row, "app_package"));
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("active", integer(row, "active", 1));
             db.insert("reduce_items", null, v);

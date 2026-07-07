@@ -15,7 +15,7 @@ import java.util.List;
 public class HabitDb extends SQLiteOpenHelper {
     // データ保持のため、旧版と同じ DB 名を維持する。
     private static final String DB_NAME = "friction_habit.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
     public static final String CATEGORY_DO = "DO";
     public static final String CATEGORY_REDUCE = "REDUCE";
 
@@ -37,6 +37,7 @@ public class HabitDb extends SQLiteOpenHelper {
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "title TEXT NOT NULL," +
                 "note TEXT NOT NULL DEFAULT ''," +
+                "app_package TEXT NOT NULL DEFAULT ''," +
                 "created_at INTEGER NOT NULL," +
                 "active INTEGER NOT NULL DEFAULT 1" +
                 ")");
@@ -68,6 +69,11 @@ public class HabitDb extends SQLiteOpenHelper {
             }
             createCyclesTable(db);
             ensureActiveCycle(db);
+        }
+        if (oldVersion < 3) {
+            if (!hasColumn(db, "reduce_items", "app_package")) {
+                db.execSQL("ALTER TABLE reduce_items ADD COLUMN app_package TEXT NOT NULL DEFAULT ''");
+            }
         }
     }
 
@@ -213,12 +219,26 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.ReduceItem> getActiveReduceItems() {
         ArrayList<Models.ReduceItem> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,title,note FROM reduce_items WHERE active=1 ORDER BY id ASC", null)) {
+                "SELECT id,title,note,app_package FROM reduce_items WHERE active=1 ORDER BY id ASC", null)) {
             while (c.moveToNext()) {
-                list.add(new Models.ReduceItem(c.getLong(0), c.getString(1), c.getString(2)));
+                list.add(new Models.ReduceItem(c.getLong(0), c.getString(1), c.getString(2), c.getString(3)));
             }
         }
         return list;
+    }
+
+    public void setReduceItemAppPackage(long id, String appPackage) {
+        ContentValues v = new ContentValues();
+        v.put("app_package", appPackage == null ? "" : appPackage.trim());
+        getWritableDatabase().update("reduce_items", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public boolean hasRecordOn(String category, String title, String actualDate) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM records WHERE category=? AND title=? AND actual_date=?",
+                new String[]{category, title, actualDate})) {
+            return c.moveToFirst() && c.getInt(0) > 0;
+        }
     }
 
     public long addRecord(String category, String title, int durationMinutes, String actualDate) {

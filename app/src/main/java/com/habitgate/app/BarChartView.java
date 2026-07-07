@@ -35,16 +35,17 @@ public class BarChartView extends View {
         int chartH = Math.max(1, h - padTop - padBottom);
 
         paint.setTextSize(Ui.dp(getContext(), 12));
-        paint.setColor(0xFF666666);
-        canvas.drawText("やること", padLeft, Ui.dp(getContext(), 14), paint);
-        canvas.drawText("減らすこと", padLeft + Ui.dp(getContext(), 90), Ui.dp(getContext(), 14), paint);
+        paint.setColor(Ui.GOOD);
+        canvas.drawText("■ やること", padLeft, Ui.dp(getContext(), 14), paint);
+        paint.setColor(Ui.DANGER);
+        canvas.drawText("■ 減らすこと", padLeft + Ui.dp(getContext(), 90), Ui.dp(getContext(), 14), paint);
 
-        paint.setColor(0xFFE0E0E0);
+        paint.setColor(Ui.BORDER);
         canvas.drawLine(padLeft, padTop + chartH, padLeft + chartW, padTop + chartH, paint);
         canvas.drawLine(padLeft, padTop, padLeft, padTop + chartH, paint);
 
         if (totals.isEmpty()) {
-            paint.setColor(0xFF777777);
+            paint.setColor(Ui.MUTED);
             paint.setTextSize(Ui.dp(getContext(), 14));
             canvas.drawText("この期間の記録はまだありません", padLeft, padTop + chartH / 2f, paint);
             return;
@@ -64,15 +65,15 @@ public class BarChartView extends View {
             float doH = chartH * (t.doMinutes / (float) max);
             float reduceH = chartH * (t.reduceMinutes / (float) max);
 
-            paint.setColor(0xFF2E7D32);
+            paint.setColor(Ui.GOOD);
             canvas.drawRect(baseX - barW - 1, padTop + chartH - doH, baseX - 1, padTop + chartH, paint);
-            paint.setColor(0xFFC62828);
+            paint.setColor(Ui.DANGER);
             canvas.drawRect(baseX + 1, padTop + chartH - reduceH, baseX + barW + 1, padTop + chartH, paint);
 
             if (n <= 14 || i % Math.max(1, n / 8) == 0) {
-                paint.setColor(0xFF555555);
+                paint.setColor(Ui.MUTED);
                 paint.setTextSize(Ui.dp(getContext(), 10));
-                String label = t.date.substring(5);
+                String label = t.date.length() >= 10 ? t.date.substring(5).replace('-', '/') : t.date;
                 canvas.save();
                 canvas.rotate(-45, baseX, padTop + chartH + Ui.dp(getContext(), 24));
                 canvas.drawText(label, baseX - Ui.dp(getContext(), 18), padTop + chartH + Ui.dp(getContext(), 24), paint);
@@ -80,7 +81,7 @@ public class BarChartView extends View {
             }
         }
 
-        paint.setColor(0xFF777777);
+        paint.setColor(Ui.MUTED);
         paint.setTextSize(Ui.dp(getContext(), 11));
         canvas.drawText(DateTools.formatMinutes(max), Ui.dp(getContext(), 4), padTop + Ui.dp(getContext(), 8), paint);
     }

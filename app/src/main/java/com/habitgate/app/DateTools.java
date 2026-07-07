@@ -10,6 +10,8 @@ import java.time.format.DateTimeFormatter;
 public final class DateTools {
     public static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
     public static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter DISPLAY_DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd");
+    private static final String[] WEEKDAYS_JA = {"月", "火", "水", "木", "金", "土", "日"};
 
     private DateTools() {}
 
@@ -25,6 +27,14 @@ public final class DateTools {
         return LocalDate.parse(isoDate, DATE).plusDays(1).format(DATE);
     }
 
+    public static LocalDate parseOrToday(String isoDate) {
+        try {
+            return LocalDate.parse(isoDate, DATE);
+        } catch (Exception e) {
+            return LocalDate.now();
+        }
+    }
+
     public static String startOfWeek() {
         LocalDate today = LocalDate.now();
         return today.with(DayOfWeek.MONDAY).format(DATE);
@@ -38,6 +48,26 @@ public final class DateTools {
         if (left == null || left.isEmpty()) return right;
         if (right == null || right.isEmpty()) return left;
         return left.compareTo(right) >= 0 ? left : right;
+    }
+
+    public static String formatDisplayDate(String isoDate) {
+        if (isoDate == null || isoDate.trim().isEmpty()) return "";
+        try {
+            return LocalDate.parse(isoDate, DATE).format(DISPLAY_DATE);
+        } catch (Exception e) {
+            return isoDate.replace('-', '/');
+        }
+    }
+
+    public static String formatShortDateWithWeekday(String isoDate) {
+        if (isoDate == null || isoDate.trim().isEmpty()) return "";
+        try {
+            LocalDate date = LocalDate.parse(isoDate, DATE);
+            String weekday = WEEKDAYS_JA[date.getDayOfWeek().getValue() - 1];
+            return String.format("%02d/%02d(%s)", date.getMonthValue(), date.getDayOfMonth(), weekday);
+        } catch (Exception e) {
+            return isoDate.replace('-', '/');
+        }
     }
 
     public static String formatMinutes(int minutes) {
@@ -79,5 +109,13 @@ public final class DateTools {
     public static String formatDateTime(long epochMillis) {
         if (epochMillis <= 0) return "";
         return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(DATE_TIME);
+    }
+
+    public static long dayStartMillis(String isoDate) {
+        return parseOrToday(isoDate).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    public static long dayEndMillis(String isoDate) {
+        return parseOrToday(isoDate).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 }

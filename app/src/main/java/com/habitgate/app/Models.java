@@ -21,11 +21,18 @@ public final class Models {
         public final long id;
         public final String title;
         public final String note;
+        // 使用時間を自動計測する連携アプリのパッケージ名。未連携なら空文字。
+        public final String appPackage;
 
-        public ReduceItem(long id, String title, String note) {
+        public ReduceItem(long id, String title, String note, String appPackage) {
             this.id = id;
             this.title = title;
             this.note = note == null ? "" : note;
+            this.appPackage = appPackage == null ? "" : appPackage;
+        }
+
+        public boolean hasLinkedApp() {
+            return !appPackage.isEmpty();
         }
     }
 

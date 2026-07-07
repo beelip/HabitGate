@@ -1,15 +1,17 @@
 package com.habitgate.app;
 
+import android.app.DatePickerDialog;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,11 +20,14 @@ public class CheckInActivity extends android.app.Activity {
     private final List<DoRow> doRows = new ArrayList<>();
     private final List<ReduceRow> reduceRows = new ArrayList<>();
     private Models.Cycle cycle;
+    // 記録の対象日。既定は現在のサイクル対象日で、過去日などに変更できる。
+    private String targetDate;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         db = new HabitDb(this);
+        targetDate = db.getCurrentCycle().cycleDate;
         buildUi();
     }
 
@@ -30,71 +35,112 @@ public class CheckInActivity extends android.app.Activity {
         cycle = db.getCurrentCycle();
         doRows.clear();
         reduceRows.clear();
+        boolean isCurrentCycleDate = targetDate.equals(cycle.cycleDate);
 
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout root = Ui.vertical(this);
-        root.setPadding(Ui.dp(this, 18), Ui.dp(this, 18), Ui.dp(this, 18), Ui.dp(this, 36));
-        scroll.addView(root);
-
+        LinearLayout root = Ui.screen(this);
         root.addView(Ui.title(this, "今日は何をした？"));
-        root.addView(Ui.note(this, "対象日: " + cycle.cycleDate + " / 開始: " + DateTools.formatDateTime(cycle.startAt)));
-        root.addView(Ui.note(this, "この画面は通知時刻以外でもいつでも開けます。保存しても一日は終了しません。"));
 
+        // 対象日カード
+        LinearLayout dateCard = Ui.card(this, root);
+        LinearLayout dateRow = Ui.horizontal(this);
+        TextView dateText = new TextView(this);
+        dateText.setText("対象日: " + DateTools.formatShortDateWithWeekday(targetDate)
+                + (isCurrentCycleDate ? "" : "（過去入力）"));
+        dateText.setTextSize(17);
+        dateText.setTypeface(Typeface.DEFAULT_BOLD);
+        dateText.setTextColor(isCurrentCycleDate ? Ui.TEXT : Ui.PRIMARY);
+        dateRow.addView(dateText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button changeDate = Ui.iconButton(this, "📅");
+        changeDate.setContentDescription("対象日を変更");
+        changeDate.setOnClickListener(v -> openTargetDatePicker());
+        dateRow.addView(changeDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        dateCard.addView(dateRow);
+        if (isCurrentCycleDate) {
+            dateCard.addView(Ui.note(this, "開始: " + DateTools.formatDateTime(cycle.startAt) + " / 📅 から過去の日付を選んで、後から記録することもできます。"));
+        } else {
+            dateCard.addView(Ui.note(this, "選択した日付の実績として保存されます。一日の終了は現在の対象日でのみ行えます。"));
+        }
+
+        // この日のやることを追加
         root.addView(Ui.section(this, "この日のやることを追加"));
+        LinearLayout addCard = Ui.card(this, root);
         EditText addTitle = Ui.edit(this, "例: 30分走る / PM過去問1問");
         EditText addNote = Ui.edit(this, "メモ（任意）");
-        root.addView(addTitle);
-        root.addView(addNote);
-        Button addToday = Ui.button(this, cycle.cycleDate + " に追加");
-        addToday.setOnClickListener(v -> {
+        addCard.addView(addTitle);
+        addCard.addView(addNote);
+        Button addButton = Ui.tonalButton(this, DateTools.formatShortDateWithWeekday(targetDate) + " に追加");
+        addButton.setOnClickListener(v -> {
             String title = addTitle.getText().toString().trim();
             if (title.isEmpty()) return;
-            db.addDoTask(title, addNote.getText().toString(), cycle.cycleDate);
+            db.addDoTask(title, addNote.getText().toString(), targetDate);
             Toast.makeText(this, "追加しました", Toast.LENGTH_SHORT).show();
             buildUi();
         });
-        root.addView(addToday);
+        addCard.addView(addButton);
 
+        // やること
         root.addView(Ui.section(this, "やること"));
-        List<Models.Task> tasks = db.getDueDoTasks(cycle.cycleDate);
+        LinearLayout doCard = Ui.card(this, root);
+        List<Models.Task> tasks = db.getDueDoTasks(targetDate);
         if (tasks.isEmpty()) {
-            root.addView(Ui.note(this, "この日に処理するタスクはありません。上の欄から当日タスクを追加できます。"));
+            doCard.addView(Ui.note(this, "この日に処理するタスクはありません。上の欄から追加できます。"));
         } else {
+            boolean first = true;
             for (Models.Task task : tasks) {
-                DoRow row = addTaskRow(root, task);
-                doRows.add(row);
-                Ui.addDivider(this, root);
+                if (!first) Ui.addDivider(this, doCard);
+                first = false;
+                doRows.add(addTaskRow(doCard, task));
             }
         }
 
+        // 減らすこと
         root.addView(Ui.section(this, "減らすこと"));
+        LinearLayout reduceCard = Ui.card(this, root);
         List<Models.ReduceItem> items = db.getActiveReduceItems();
         if (items.isEmpty()) {
-            root.addView(Ui.note(this, "減らすことが未登録です。メイン画面から追加できます。"));
+            reduceCard.addView(Ui.note(this, "減らすことが未登録です。メイン画面から追加できます。"));
         } else {
+            boolean linkedWithoutPermission = false;
+            boolean first = true;
             for (Models.ReduceItem item : items) {
-                ReduceRow row = addReduceRow(root, item);
-                reduceRows.add(row);
-                Ui.addDivider(this, root);
+                if (!first) Ui.addDivider(this, reduceCard);
+                first = false;
+                reduceRows.add(addReduceRow(reduceCard, item));
+                if (item.hasLinkedApp() && !AppUsage.hasPermission(this)) linkedWithoutPermission = true;
+            }
+            if (linkedWithoutPermission) {
+                reduceCard.addView(Ui.note(this, "⚠ アプリ連携済みの項目がありますが、「使用状況へのアクセス」が未許可のため計測できません。設定画面から許可してください。"));
             }
         }
 
-        Button save = Ui.button(this, "実績を保存する");
+        Ui.space(this, root, 6);
+        Button save = Ui.primaryButton(this, "実績を保存する");
         save.setOnClickListener(v -> save(false));
         root.addView(save);
 
-        Button closeDay = Ui.button(this, "保存して、この日を終わらせる");
-        closeDay.setOnClickListener(v -> save(true));
-        root.addView(closeDay);
+        if (isCurrentCycleDate) {
+            Ui.space(this, root, 8);
+            Button closeDay = Ui.tonalButton(this, "保存して、この日を終わらせる");
+            closeDay.setOnClickListener(v -> save(true));
+            root.addView(closeDay);
+        }
+    }
 
-        setContentView(scroll);
+    private void openTargetDatePicker() {
+        LocalDate initial = DateTools.parseOrToday(targetDate);
+        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
+            targetDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
+            buildUi();
+        }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
     }
 
     private DoRow addTaskRow(LinearLayout parent, Models.Task task) {
         LinearLayout wrapper = Ui.vertical(this);
         TextView title = new TextView(this);
-        title.setText(task.title + "  （予定: " + task.plannedDate + "）");
+        title.setText(task.title + "  （予定: " + DateTools.formatShortDateWithWeekday(task.plannedDate) + "）");
         title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(Ui.TEXT);
         wrapper.addView(title);
         if (!task.note.isEmpty()) {
             wrapper.addView(Ui.note(this, "メモ: " + task.note));
@@ -125,19 +171,44 @@ public class CheckInActivity extends android.app.Activity {
         TextView title = new TextView(this);
         title.setText(item.title);
         title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(Ui.TEXT);
         wrapper.addView(title);
         if (!item.note.isEmpty()) {
             wrapper.addView(Ui.note(this, "メモ: " + item.note));
         }
 
         CheckBox done = new CheckBox(this);
-        done.setText("今日やってしまった");
+        done.setText("この日やってしまった");
         wrapper.addView(done);
 
         LinearLayout duration = durationRow();
         EditText h = (EditText) duration.getChildAt(1);
         EditText m = (EditText) duration.getChildAt(3);
         wrapper.addView(duration);
+
+        // アプリ連携済みなら計測時間を表示し、タップで時間欄に反映する
+        if (item.hasLinkedApp() && AppUsage.hasPermission(this)) {
+            int measured = AppUsage.foregroundMinutesOn(this, item.appPackage, targetDate);
+            LinearLayout measuredRow = Ui.horizontal(this);
+            TextView measuredText = new TextView(this);
+            measuredText.setText("📱 " + AppUsage.appLabel(this, item.appPackage) + " 計測: " + DateTools.formatMinutes(measured));
+            measuredText.setTextSize(14);
+            measuredText.setTextColor(Ui.PRIMARY);
+            measuredRow.addView(measuredText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+            if (measured > 0) {
+                Button apply = Ui.tonalButton(this, "反映");
+                apply.setMinHeight(Ui.dp(this, 36));
+                apply.setMinimumHeight(Ui.dp(this, 36));
+                apply.setOnClickListener(v -> {
+                    h.setText(String.valueOf(measured / 60));
+                    m.setText(String.valueOf(measured % 60));
+                    done.setChecked(true);
+                });
+                measuredRow.addView(apply, new LinearLayout.LayoutParams(Ui.dp(this, 80), LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+            wrapper.addView(measuredRow);
+        }
 
         EditText note = Ui.edit(this, "実績メモ（任意）");
         wrapper.addView(note);
@@ -152,12 +223,12 @@ public class CheckInActivity extends android.app.Activity {
         TextView label = new TextView(this);
         label.setText("時間: ");
         row.addView(label);
-        EditText h = Ui.numberEdit(this, "時", 3);
+        EditText h = Ui.numberEdit(this, "0", 3);
         row.addView(h);
         TextView colon = new TextView(this);
-        colon.setText(" 時 ");
+        colon.setText(" 時間 ");
         row.addView(colon);
-        EditText m = Ui.numberEdit(this, "分", 3);
+        EditText m = Ui.numberEdit(this, "0", 3);
         row.addView(m);
         TextView suffix = new TextView(this);
         suffix.setText(" 分");
@@ -173,7 +244,7 @@ public class CheckInActivity extends android.app.Activity {
             String actualNote = row.note.getText().toString().trim();
             boolean shouldLog = row.logCheck.isChecked() || row.completeCheck.isChecked() || minutes > 0 || !actualNote.isEmpty();
             if (shouldLog) {
-                db.addRecord(HabitDb.CATEGORY_DO, row.task.title, mergeNotes(row.task.note, actualNote), minutes, cycle.cycleDate);
+                db.addRecord(HabitDb.CATEGORY_DO, row.task.title, mergeNotes(row.task.note, actualNote), minutes, targetDate);
                 records++;
             }
             if (row.completeCheck.isChecked()) {
@@ -186,16 +257,19 @@ public class CheckInActivity extends android.app.Activity {
             String actualNote = row.note.getText().toString().trim();
             boolean shouldLog = row.doneCheck.isChecked() || minutes > 0 || !actualNote.isEmpty();
             if (shouldLog) {
-                db.addRecord(HabitDb.CATEGORY_REDUCE, row.item.title, mergeNotes(row.item.note, actualNote), minutes, cycle.cycleDate);
+                db.addRecord(HabitDb.CATEGORY_REDUCE, row.item.title, mergeNotes(row.item.note, actualNote), minutes, targetDate);
                 records++;
             }
         }
 
         String extra = "";
         if (closeAfterSave) {
+            // 手動未入力のアプリ連携項目は、計測時間で自動記録してから一日を閉じる
+            int auto = AppUsage.autoRecordLinkedApps(this, db, cycle.cycleDate);
+            if (auto > 0) extra += " / 自動計測" + auto + "件";
             Models.Cycle next = db.endCurrentCycleAndStartNext();
             ReminderScheduler.scheduleNext(this);
-            extra = " / 次の対象日: " + next.cycleDate;
+            extra += " / 次の対象日: " + DateTools.formatDisplayDate(next.cycleDate);
         }
         SheetsSync.syncUnsynced(this, false);
         if (closeAfterSave) {
@@ -205,16 +279,15 @@ public class CheckInActivity extends android.app.Activity {
         finish();
     }
 
-
     private String updateConfiguredCsvBackupMessage() {
         if (!CsvBackupManager.hasBackupDirectory(this)) {
-            return " / CSV自動更新: 未設定";
+            return "";
         }
         try {
             CsvBackupManager.writeBackupToConfiguredDirectory(this);
-            return " / CSV自動更新: 完了";
+            return " / CSV更新: 完了";
         } catch (Exception e) {
-            return " / CSV自動更新: 失敗";
+            return " / CSV更新: 失敗";
         }
     }
 
