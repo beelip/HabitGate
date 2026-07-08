@@ -14,7 +14,7 @@ import android.widget.Toast;
 
 import java.util.List;
 
-public class MainActivity extends android.app.Activity {
+public class MainActivity extends ThemedActivity {
     private HabitDb db;
     private LinearLayout doList;
     private LinearLayout reduceList;
@@ -90,7 +90,7 @@ public class MainActivity extends android.app.Activity {
 
     private void confirmCloseCurrentCycle() {
         Models.Cycle cycle = db.getCurrentCycle();
-        new AlertDialog.Builder(this)
+        Ui.dialog(this)
                 .setTitle("一日を終えますか？")
                 .setMessage(DateTools.formatDisplayDate(cycle.cycleDate) + " を終了して次の日へ移ります。未完了のやることは繰り越されます。")
                 .setPositiveButton("終了する", (dialog, which) -> closeCurrentCycle())
@@ -198,7 +198,7 @@ public class MainActivity extends android.app.Activity {
 
     private void confirmCarryOver(Models.Task t, Models.Cycle cycle) {
         String nextDate = DateTools.nextDay(DateTools.maxDate(t.plannedDate, cycle.cycleDate));
-        new AlertDialog.Builder(this)
+        Ui.dialog(this)
                 .setTitle("翌日に繰り越しますか？")
                 .setMessage("「" + t.title + "」を " + DateTools.formatShortDateWithWeekday(nextDate) + " に移動します。")
                 .setPositiveButton("繰り越す", (dialog, which) -> {

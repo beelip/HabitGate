@@ -15,7 +15,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CheckInActivity extends android.app.Activity {
+public class CheckInActivity extends ThemedActivity {
     private HabitDb db;
     private final List<DoRow> doRows = new ArrayList<>();
     private final List<ReduceRow> reduceRows = new ArrayList<>();
@@ -128,7 +128,7 @@ public class CheckInActivity extends android.app.Activity {
 
     private void openTargetDatePicker() {
         LocalDate initial = DateTools.parseOrToday(targetDate);
-        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
+        new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
             targetDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
             buildUi();
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
@@ -223,12 +223,12 @@ public class CheckInActivity extends android.app.Activity {
         TextView label = new TextView(this);
         label.setText("時間: ");
         row.addView(label);
-        EditText h = Ui.numberEdit(this, "0", 3);
+        EditText h = Ui.numberEdit(this, "0", 99);
         row.addView(h);
         TextView colon = new TextView(this);
         colon.setText(" 時間 ");
         row.addView(colon);
-        EditText m = Ui.numberEdit(this, "0", 3);
+        EditText m = Ui.numberEdit(this, "0", 59);
         row.addView(m);
         TextView suffix = new TextView(this);
         suffix.setText(" 分");

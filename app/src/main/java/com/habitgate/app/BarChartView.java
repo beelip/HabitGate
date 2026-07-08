@@ -11,6 +11,7 @@ import java.util.List;
 public class BarChartView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private List<Models.DayTotal> totals = new ArrayList<>();
+    private List<String> labels;
 
     public BarChartView(Context context) {
         super(context);
@@ -19,6 +20,13 @@ public class BarChartView extends View {
 
     public void setTotals(List<Models.DayTotal> totals) {
         this.totals = totals == null ? new ArrayList<>() : totals;
+        this.labels = null;
+        invalidate();
+    }
+
+    public void setTotals(List<Models.DayTotal> totals, List<String> labels) {
+        this.totals = totals == null ? new ArrayList<>() : totals;
+        this.labels = labels;
         invalidate();
     }
 
@@ -73,7 +81,9 @@ public class BarChartView extends View {
             if (n <= 14 || i % Math.max(1, n / 8) == 0) {
                 paint.setColor(Ui.MUTED);
                 paint.setTextSize(Ui.dp(getContext(), 10));
-                String label = t.date.length() >= 10 ? t.date.substring(5).replace('-', '/') : t.date;
+                String label = (labels != null && i < labels.size())
+                        ? labels.get(i)
+                        : (t.date.length() >= 10 ? t.date.substring(5).replace('-', '/') : t.date);
                 canvas.save();
                 canvas.rotate(-45, baseX, padTop + chartH + Ui.dp(getContext(), 24));
                 canvas.drawText(label, baseX - Ui.dp(getContext(), 18), padTop + chartH + Ui.dp(getContext(), 24), paint);

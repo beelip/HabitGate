@@ -338,6 +338,28 @@ public class HabitDb extends SQLiteOpenHelper {
         getWritableDatabase().update("do_tasks", v, "id=? AND active=1", new String[]{String.valueOf(id)});
     }
 
+    public Models.Record getRecord(long id) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records WHERE id=?",
+                new String[]{String.valueOf(id)})) {
+            if (c.moveToFirst()) return recordFromCursor(c);
+        }
+        return null;
+    }
+
+    public void updateRecord(long id, int durationMinutes, String note, String actualDate) {
+        ContentValues v = new ContentValues();
+        v.put("duration_minutes", Math.max(0, durationMinutes));
+        v.put("note", clean(note));
+        v.put("actual_date", actualDate);
+        v.put("synced", 0);
+        getWritableDatabase().update("records", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public void deleteRecord(long id) {
+        getWritableDatabase().delete("records", "id=?", new String[]{String.valueOf(id)});
+    }
+
     public List<Models.Record> getRecords(String fromDateInclusive, String toDateInclusive) {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(

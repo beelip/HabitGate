@@ -65,7 +65,7 @@ public final class AppPickerDialog {
         wrapper.addView(listView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(context, 400)));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+        AlertDialog.Builder builder = Ui.dialog(activity)
                 .setTitle("連携するアプリを選択")
                 .setView(wrapper)
                 .setNegativeButton("キャンセル", null);

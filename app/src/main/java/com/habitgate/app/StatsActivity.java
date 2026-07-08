@@ -1,6 +1,7 @@
 package com.habitgate.app;
 
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.GestureDetector;
@@ -10,14 +11,17 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class StatsActivity extends android.app.Activity {
+public class StatsActivity extends ThemedActivity {
     private HabitDb db;
     private LinearLayout list;
     private BarChartView chart;
     private String mode = "week";
-    private String pickedDate;
+    private String selectedDate;
     private Button dayChip;
     private Button weekChip;
     private Button monthChip;
@@ -28,6 +32,7 @@ public class StatsActivity extends android.app.Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         db = new HabitDb(this);
+        selectedDate = db.getCurrentCycle().cycleDate;
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
@@ -46,6 +51,12 @@ public class StatsActivity extends android.app.Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        refresh();
+    }
+
+    @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         gestureDetector.onTouchEvent(ev);
         return super.dispatchTouchEvent(ev);
@@ -53,7 +64,7 @@ public class StatsActivity extends android.app.Activity {
 
     private void swipeMode(int delta) {
         String[] order = {"day", "week", "month"};
-        int index = "date".equals(mode) ? 0 : indexOf(order, mode);
+        int index = indexOf(order, mode);
         int next = Math.max(0, Math.min(order.length - 1, index + delta));
         if (!order[next].equals(mode)) {
             mode = order[next];
@@ -86,7 +97,7 @@ public class StatsActivity extends android.app.Activity {
         addChip(chips, dayChip, true);
         addChip(chips, weekChip, true);
         addChip(chips, monthChip, true);
-        addChip(chips, dateChip, false);
+        chips.addView(dateChip, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(chips);
         Ui.space(this, root, 10);
 
@@ -106,48 +117,98 @@ public class StatsActivity extends android.app.Activity {
     }
 
     private void openDatePicker() {
-        LocalDate initial = pickedDate == null ? LocalDate.now() : DateTools.parseOrToday(pickedDate);
-        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
-            pickedDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
-            mode = "date";
+        LocalDate initial = DateTools.parseOrToday(selectedDate);
+        new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
+            selectedDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
+            mode = "day";
             refresh();
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
     }
 
+    private List<Models.DayTotal> expandDaily(String from, String to) {
+        Map<String, Models.DayTotal> byDate = new HashMap<>();
+        for (Models.DayTotal t : db.getDayTotals(from, to)) {
+            byDate.put(t.date, t);
+        }
+        List<Models.DayTotal> result = new ArrayList<>();
+        String date = from;
+        int guard = 0;
+        while (date.compareTo(to) <= 0 && guard < 62) {
+            Models.DayTotal t = byDate.get(date);
+            result.add(t != null ? t : new Models.DayTotal(date, 0, 0));
+            date = DateTools.addDaysTo(date, 1);
+            guard++;
+        }
+        return result;
+    }
+
     private void refresh() {
+        String todayRef = db.getCurrentCycle().cycleDate;
+        dayChip.setText(selectedDate.equals(todayRef) ? "今日" : DateTools.formatShortDateWithWeekday(selectedDate));
+        weekChip.setText(DateTools.sameWeek(selectedDate, todayRef) ? "今週" : "この週");
+        monthChip.setText(DateTools.sameMonth(selectedDate, todayRef) ? "今月" : "この月");
+
         Ui.setChipSelected(dayChip, "day".equals(mode));
         Ui.setChipSelected(weekChip, "week".equals(mode));
         Ui.setChipSelected(monthChip, "month".equals(mode));
-        Ui.setChipSelected(dateChip, "date".equals(mode));
-        if ("date".equals(mode) && pickedDate != null) {
-            dateChip.setText(DateTools.formatShortDateWithWeekday(pickedDate));
-        } else {
-            dateChip.setText("📅");
-        }
 
-        String today = DateTools.today();
-        Models.Cycle active = db.getCurrentCycle();
-        String to = DateTools.maxDate(today, active.cycleDate);
         String from;
+        String to;
         String label;
+        List<Models.DayTotal> chartTotals;
+        List<String> chartLabels = null;
+
         if ("day".equals(mode)) {
-            from = active.cycleDate;
-            to = active.cycleDate;
-            label = "今日";
-        } else if ("date".equals(mode) && pickedDate != null) {
-            from = pickedDate;
-            to = pickedDate;
-            label = DateTools.formatDisplayDate(pickedDate);
+            from = selectedDate;
+            to = selectedDate;
+            label = dayChip.getText().toString();
+            chartTotals = expandDaily(from, to);
         } else if ("month".equals(mode)) {
-            from = DateTools.startOfMonth();
-            label = "今月";
+            from = DateTools.startOfMonthOf(selectedDate);
+            to = DateTools.endOfMonthOf(selectedDate);
+            label = monthChip.getText().toString();
+
+            LocalDate monthStart = DateTools.parseOrToday(from);
+            int monthLength = monthStart.lengthOfMonth();
+            int weeks = ((monthLength - 1) / 7) + 1;
+            int[] doSums = new int[weeks];
+            int[] reduceSums = new int[weeks];
+            for (Models.DayTotal t : db.getDayTotals(from, to)) {
+                int dayOfMonth = DateTools.parseOrToday(t.date).getDayOfMonth();
+                int idx = (dayOfMonth - 1) / 7;
+                if (idx >= 0 && idx < weeks) {
+                    doSums[idx] += t.doMinutes;
+                    reduceSums[idx] += t.reduceMinutes;
+                }
+            }
+            List<Models.DayTotal> weekTotals = new ArrayList<>();
+            List<String> weekLabels = new ArrayList<>();
+            int totalDo = 0;
+            int totalReduce = 0;
+            for (int w = 0; w < weeks; w++) {
+                String weekStart = DateTools.addDaysTo(from, w * 7);
+                weekTotals.add(new Models.DayTotal(weekStart, doSums[w], reduceSums[w]));
+                weekLabels.add((w + 1) + "週");
+                totalDo += doSums[w];
+                totalReduce += reduceSums[w];
+            }
+            weekTotals.add(new Models.DayTotal(to, totalDo, totalReduce));
+            weekLabels.add("合計");
+            chartTotals = weekTotals;
+            chartLabels = weekLabels;
         } else {
-            from = DateTools.startOfWeek();
-            label = "今週";
+            from = DateTools.startOfWeekOf(selectedDate);
+            to = DateTools.endOfWeekOf(selectedDate);
+            label = weekChip.getText().toString();
+            chartTotals = expandDaily(from, to);
         }
 
-        List<Models.DayTotal> totals = db.getDayTotals(from, to);
-        chart.setTotals(totals);
+        if (chartLabels == null) {
+            chart.setTotals(chartTotals);
+        } else {
+            chart.setTotals(chartTotals, chartLabels);
+        }
+
         List<Models.Record> records = db.getRecords(from, to);
         List<Models.Cycle> cycles = db.getCycles(from, to);
         List<Models.CompletedTask> completedTasks = db.getCompletedTaskTotals(from, to);
@@ -227,6 +288,13 @@ public class StatsActivity extends android.app.Activity {
                 right.setTextColor(Ui.TEXT);
                 right.setGravity(android.view.Gravity.END);
                 row.addView(right, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                Ui.tappable(row);
+                long recordId = r.id;
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(StatsActivity.this, RecordEditActivity.class);
+                    intent.putExtra("record_id", recordId);
+                    startActivity(intent);
+                });
                 recordsCard.addView(row);
             }
         }

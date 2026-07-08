@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /** やること／減らすことの追加・一覧・削除・アプリ連携を行う編集画面。 */
-public class TaskEditActivity extends android.app.Activity {
+public class TaskEditActivity extends ThemedActivity {
     private HabitDb db;
     private LinearLayout doList;
     private LinearLayout reduceList;
@@ -97,7 +97,7 @@ public class TaskEditActivity extends android.app.Activity {
     private void openTaskDatePicker() {
         Models.Cycle cycle = db.getCurrentCycle();
         LocalDate initial = DateTools.parseOrToday(cycle.cycleDate).plusDays(1);
-        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
+        new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
             LocalDate selected = LocalDate.of(year, month + 1, dayOfMonth);
             addDoTaskForDate(selected.format(DateTools.DATE));
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
@@ -206,7 +206,7 @@ public class TaskEditActivity extends android.app.Activity {
     }
 
     private void promptUsageAccess(String appLabel) {
-        new AlertDialog.Builder(this)
+        Ui.dialog(this)
                 .setTitle("使用状況へのアクセスが必要です")
                 .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
                 .setPositiveButton("設定を開く", (dialog, which) -> {
@@ -221,7 +221,7 @@ public class TaskEditActivity extends android.app.Activity {
     }
 
     private void confirmDelete(String type, String title, Runnable onConfirm) {
-        new AlertDialog.Builder(this)
+        Ui.dialog(this)
                 .setTitle(type + "を削除しますか？")
                 .setMessage("「" + title + "」を削除します。")
                 .setPositiveButton("削除", (dialog, which) -> {
