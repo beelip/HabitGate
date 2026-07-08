@@ -44,6 +44,37 @@ public final class DateTools {
         return LocalDate.now().withDayOfMonth(1).format(DATE);
     }
 
+    public static String startOfWeekOf(String isoDate) {
+        return parseOrToday(isoDate).with(DayOfWeek.MONDAY).format(DATE);
+    }
+
+    public static String endOfWeekOf(String isoDate) {
+        return parseOrToday(isoDate).with(DayOfWeek.SUNDAY).format(DATE);
+    }
+
+    public static String startOfMonthOf(String isoDate) {
+        return parseOrToday(isoDate).withDayOfMonth(1).format(DATE);
+    }
+
+    public static String endOfMonthOf(String isoDate) {
+        LocalDate date = parseOrToday(isoDate);
+        return date.withDayOfMonth(date.lengthOfMonth()).format(DATE);
+    }
+
+    public static String addDaysTo(String isoDate, int days) {
+        return parseOrToday(isoDate).plusDays(days).format(DATE);
+    }
+
+    public static boolean sameWeek(String a, String b) {
+        return startOfWeekOf(a).equals(startOfWeekOf(b));
+    }
+
+    public static boolean sameMonth(String a, String b) {
+        String na = parseOrToday(a).format(DATE);
+        String nb = parseOrToday(b).format(DATE);
+        return na.substring(0, 7).equals(nb.substring(0, 7));
+    }
+
     public static String maxDate(String left, String right) {
         if (left == null || left.isEmpty()) return right;
         if (right == null || right.isEmpty()) return left;

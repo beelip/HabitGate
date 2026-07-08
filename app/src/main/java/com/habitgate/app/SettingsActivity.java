@@ -4,22 +4,29 @@ import android.app.AlertDialog;
 import android.app.TimePickerDialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.InputType;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 
-public class SettingsActivity extends android.app.Activity {
+public class SettingsActivity extends ThemedActivity {
     private static final int REQUEST_BACKUP_DIRECTORY = 201;
     private static final int REQUEST_IMPORT_CSV = 202;
 
@@ -28,6 +35,7 @@ public class SettingsActivity extends android.app.Activity {
     private TextView backupInfo;
     private TextView sheetsInfo;
     private TextView usageInfo;
+    private TextView themeInfo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,6 +53,37 @@ public class SettingsActivity extends android.app.Activity {
         LinearLayout root = Ui.screen(this);
 
         root.addView(Ui.title(this, "設定"));
+
+        root.addView(Ui.section(this, "デザイン"));
+        LinearLayout designCard = Ui.card(this, root);
+        themeInfo = Ui.body(this, "");
+        designCard.addView(themeInfo);
+        Ui.space(this, designCard, 8);
+        Button themeButton = Ui.button(this, "テーマを選択");
+        themeButton.setOnClickListener(v -> openThemePicker());
+        designCard.addView(themeButton);
+        Ui.space(this, designCard, 8);
+        boolean followSystem = ReminderScheduler.prefs(this).getBoolean(Themes.KEY_FOLLOW_SYSTEM_DARK, false);
+        CheckBox darkModeCheck = new CheckBox(this);
+        darkModeCheck.setText("ダークモード");
+        darkModeCheck.setTextColor(Ui.TEXT);
+        darkModeCheck.setChecked(ReminderScheduler.prefs(this).getBoolean(Themes.KEY_DARK, false));
+        darkModeCheck.setEnabled(!followSystem);
+        darkModeCheck.setOnCheckedChangeListener((button, isChecked) -> {
+            Themes.saveDark(this, isChecked);
+            recreate();
+        });
+        designCard.addView(darkModeCheck);
+        CheckBox followSystemCheck = new CheckBox(this);
+        followSystemCheck.setText("端末のダークモードと連携する");
+        followSystemCheck.setTextColor(Ui.TEXT);
+        followSystemCheck.setChecked(followSystem);
+        followSystemCheck.setOnCheckedChangeListener((button, isChecked) -> {
+            Themes.saveFollowSystemDark(this, isChecked);
+            recreate();
+        });
+        designCard.addView(followSystemCheck);
+        designCard.addView(Ui.note(this, "テーマは全画面に反映されます。「端末のダークモードと連携する」を有効にすると、端末側の設定に合わせて自動で切り替わります。"));
 
         root.addView(Ui.section(this, "通知"));
         LinearLayout notifyCard = Ui.card(this, root);
@@ -113,6 +152,9 @@ public class SettingsActivity extends android.app.Activity {
 
     private void refreshStatus() {
         if (backupInfo == null) return;
+        if (themeInfo != null) {
+            themeInfo.setText("テーマ: " + Themes.current(this).label);
+        }
         backupInfo.setText("自動CSV更新先: " + CsvBackupManager.backupDirectoryLabel(this) + "\nファイル名: " + CsvBackupManager.BACKUP_FILE_NAME);
         String url = ReminderScheduler.webhookUrl(this);
         sheetsInfo.setText(url == null || url.trim().isEmpty() ? "連携URL: 未設定" : "連携URL: 設定済み");
@@ -121,9 +163,104 @@ public class SettingsActivity extends android.app.Activity {
         usageInfo.setTextColor(granted ? Ui.GOOD : Ui.DANGER);
     }
 
+    private void openThemePicker() {
+        List<Themes.Theme> themes = Themes.all();
+        String currentId = Themes.current(this).id;
+
+        int pad = Ui.dp(this, 18);
+        LinearLayout wrapper = Ui.vertical(this);
+        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
+
+        ListView listView = new ListView(this);
+        ThemeAdapter adapter = new ThemeAdapter(this, themes, currentId);
+        listView.setAdapter(adapter);
+        wrapper.addView(listView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 420)));
+
+        AlertDialog dialog = Ui.dialog(this)
+                .setTitle("テーマを選択")
+                .setView(wrapper)
+                .setNegativeButton("キャンセル", null)
+                .create();
+
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            Themes.Theme theme = themes.get(position);
+            Themes.saveThemeId(this, theme.id);
+            dialog.dismiss();
+            recreate();
+        });
+
+        dialog.show();
+    }
+
+    private static class ThemeAdapter extends BaseAdapter {
+        private final Context context;
+        private final List<Themes.Theme> themes;
+        private final String currentId;
+
+        ThemeAdapter(Context context, List<Themes.Theme> themes, String currentId) {
+            this.context = context;
+            this.themes = themes;
+            this.currentId = currentId;
+        }
+
+        @Override
+        public int getCount() {
+            return themes.size();
+        }
+
+        @Override
+        public Object getItem(int position) {
+            return themes.get(position);
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            Themes.Theme theme = themes.get(position);
+            Themes.Palette preview = theme.preview();
+
+            LinearLayout row = Ui.horizontal(context);
+            int pad = Ui.dp(context, 10);
+            row.setPadding(pad, pad, pad, pad);
+
+            View swatch1 = new View(context);
+            int swatchSize = Ui.dp(context, 20);
+            swatch1.setBackground(Ui.rounded(preview.primary, 0, Ui.dp(context, 10)));
+            LinearLayout.LayoutParams swatch1Lp = new LinearLayout.LayoutParams(swatchSize, swatchSize);
+            swatch1Lp.rightMargin = Ui.dp(context, 6);
+            row.addView(swatch1, swatch1Lp);
+
+            View swatch2 = new View(context);
+            swatch2.setBackground(Ui.rounded(preview.bg, preview.border, Ui.dp(context, 10)));
+            LinearLayout.LayoutParams swatch2Lp = new LinearLayout.LayoutParams(swatchSize, swatchSize);
+            swatch2Lp.rightMargin = Ui.dp(context, 12);
+            row.addView(swatch2, swatch2Lp);
+
+            TextView label = new TextView(context);
+            label.setText(theme.label);
+            label.setTextSize(15);
+            label.setTextColor(Ui.TEXT);
+            row.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+            if (theme.id.equals(currentId)) {
+                TextView check = new TextView(context);
+                check.setText("✓");
+                check.setTextColor(Ui.PRIMARY);
+                row.addView(check);
+            }
+
+            return row;
+        }
+    }
+
     private void openTimePicker() {
         int[] current = DateTools.parseTime(ReminderScheduler.reminderTime(this), 22, 30);
-        new TimePickerDialog(this, (view, hourOfDay, minute) -> {
+        new TimePickerDialog(this, Ui.pickerTheme(), (view, hourOfDay, minute) -> {
             ReminderScheduler.saveReminderTime(this, hourOfDay, minute);
             reminderButton.setText("通知時刻: " + ReminderScheduler.reminderTime(this));
             Toast.makeText(this, "次回通知を設定しました", Toast.LENGTH_SHORT).show();
@@ -132,7 +269,7 @@ public class SettingsActivity extends android.app.Activity {
 
     private void openAutoCloseTimePicker() {
         int[] current = DateTools.parseTime(ReminderScheduler.autoCloseTime(this), 5, 0);
-        new TimePickerDialog(this, (view, hourOfDay, minute) -> {
+        new TimePickerDialog(this, Ui.pickerTheme(), (view, hourOfDay, minute) -> {
             ReminderScheduler.saveAutoCloseTime(this, hourOfDay, minute);
             autoCloseButton.setText("一日の自動終了時刻: " + ReminderScheduler.autoCloseTime(this));
             Toast.makeText(this, "自動終了時刻を設定しました", Toast.LENGTH_SHORT).show();
@@ -155,7 +292,7 @@ public class SettingsActivity extends android.app.Activity {
         input.setText(current);
         wrapper.addView(input);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = Ui.dialog(this)
                 .setTitle("スプレッドシート連携")
                 .setView(wrapper)
                 .setPositiveButton("保存", (dialog, which) -> {

@@ -9,7 +9,6 @@ import android.view.View;
 
 /** 使用時間を表すセグメント棒グラフ。しきい値に応じて色を変える。 */
 public class UsageBarView extends View {
-    private static final int TRACK_COLOR = 0xFFE5E7EB;
     private static final int COLOR_BLUE = 0xFF3B82F6;
     private static final int COLOR_GREEN = 0xFF22C55E;
     private static final int COLOR_YELLOW = 0xFFEAB308;
@@ -41,7 +40,7 @@ public class UsageBarView extends View {
         Path trackPath = new Path();
         trackPath.addRoundRect(trackRect, radius, radius, Path.Direction.CW);
 
-        paint.setColor(TRACK_COLOR);
+        paint.setColor(Ui.BORDER);
         canvas.drawPath(trackPath, paint);
 
         float f = maxMinutes <= 0 ? 0f : minutes / (float) maxMinutes;

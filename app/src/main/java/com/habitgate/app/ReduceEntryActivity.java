@@ -15,7 +15,7 @@ import android.widget.Toast;
 import java.time.LocalDate;
 
 /** 減らすこと項目1件の実績入力・編集を行う画面。 */
-public class ReduceEntryActivity extends android.app.Activity {
+public class ReduceEntryActivity extends ThemedActivity {
     private HabitDb db;
     private Models.ReduceItem item;
     private String entryDate;
@@ -102,16 +102,16 @@ public class ReduceEntryActivity extends android.app.Activity {
                 minutesEdit.setText(String.valueOf(measured % 60));
                 hoursEdit.setEnabled(false);
                 minutesEdit.setEnabled(false);
-                hoursEdit.setTextColor(0xFF9CA3AF);
-                minutesEdit.setTextColor(0xFF9CA3AF);
+                hoursEdit.setTextColor(Ui.HINT);
+                minutesEdit.setTextColor(Ui.HINT);
                 inputCard.addView(Ui.note(this, "アプリ連携中は使用時間を自動計測します"));
             } else {
                 hoursEdit.setText("0");
                 minutesEdit.setText("0");
                 hoursEdit.setEnabled(false);
                 minutesEdit.setEnabled(false);
-                hoursEdit.setTextColor(0xFF9CA3AF);
-                minutesEdit.setTextColor(0xFF9CA3AF);
+                hoursEdit.setTextColor(Ui.HINT);
+                minutesEdit.setTextColor(Ui.HINT);
                 inputCard.addView(Ui.note(this, "使用状況へのアクセスが未許可のため計測できません"));
             }
         } else {
@@ -138,12 +138,12 @@ public class ReduceEntryActivity extends android.app.Activity {
         TextView gaugeLabel = new TextView(this);
         gaugeLabel.setText("グラフ上限: ");
         gaugeRow.addView(gaugeLabel);
-        gaugeHoursEdit = Ui.numberEdit(this, "0", 3);
+        gaugeHoursEdit = Ui.numberEdit(this, "0", 99);
         gaugeRow.addView(gaugeHoursEdit);
         TextView gaugeHourSuffix = new TextView(this);
         gaugeHourSuffix.setText(" 時間 ");
         gaugeRow.addView(gaugeHourSuffix);
-        gaugeMinutesEdit = Ui.numberEdit(this, "0", 3);
+        gaugeMinutesEdit = Ui.numberEdit(this, "0", 59);
         gaugeRow.addView(gaugeMinutesEdit);
         TextView gaugeMinuteSuffix = new TextView(this);
         gaugeMinuteSuffix.setText(" 分");
@@ -170,12 +170,12 @@ public class ReduceEntryActivity extends android.app.Activity {
         TextView label = new TextView(this);
         label.setText("時間: ");
         row.addView(label);
-        EditText h = Ui.numberEdit(this, "0", 3);
+        EditText h = Ui.numberEdit(this, "0", 99);
         row.addView(h);
         TextView colon = new TextView(this);
         colon.setText(" 時間 ");
         row.addView(colon);
-        EditText m = Ui.numberEdit(this, "0", 3);
+        EditText m = Ui.numberEdit(this, "0", 59);
         row.addView(m);
         TextView suffix = new TextView(this);
         suffix.setText(" 分");
@@ -186,7 +186,7 @@ public class ReduceEntryActivity extends android.app.Activity {
     private void updateMemoPreview() {
         if (memo.isEmpty()) {
             memoPreview.setText("実績メモ（任意）");
-            memoPreview.setTextColor(0xFF9CA3AF);
+            memoPreview.setTextColor(Ui.HINT);
         } else {
             memoPreview.setText(memo);
             memoPreview.setTextColor(Ui.TEXT);
@@ -200,7 +200,7 @@ public class ReduceEntryActivity extends android.app.Activity {
         LinearLayout wrapper = Ui.vertical(this);
         wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
         wrapper.addView(input);
-        new AlertDialog.Builder(this)
+        Ui.dialog(this)
                 .setTitle("実績メモ")
                 .setView(wrapper)
                 .setPositiveButton("保存", (dialog, which) -> {
@@ -224,7 +224,7 @@ public class ReduceEntryActivity extends android.app.Activity {
     private void openDatePicker() {
         stashInputs();
         LocalDate initial = DateTools.parseOrToday(entryDate);
-        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
+        new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
             entryDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
             buildUi();
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();

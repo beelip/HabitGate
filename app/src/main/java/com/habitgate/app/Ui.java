@@ -1,13 +1,16 @@
 package com.habitgate.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -18,17 +21,39 @@ import android.widget.TextView;
 
 /** 依存ライブラリなしで組む、アプリ共通の小さなデザインシステム。 */
 public final class Ui {
-    public static final int BG = 0xFFF3F4F6;
-    public static final int SURFACE = 0xFFFFFFFF;
-    public static final int BORDER = 0xFFE5E7EB;
-    public static final int PRIMARY = 0xFF4F46E5;
-    public static final int PRIMARY_SOFT = 0xFFEEF2FF;
-    public static final int TEXT = 0xFF111827;
-    public static final int MUTED = 0xFF6B7280;
-    public static final int DANGER = 0xFFDC2626;
-    public static final int GOOD = 0xFF059669;
+    public static int BG = 0xFFF3F4F6;
+    public static int SURFACE = 0xFFFFFFFF;
+    public static int BORDER = 0xFFE5E7EB;
+    public static int PRIMARY = 0xFF4F46E5;
+    public static int PRIMARY_SOFT = 0xFFEEF2FF;
+    public static int TEXT = 0xFF111827;
+    public static int MUTED = 0xFF6B7280;
+    public static int DANGER = 0xFFDC2626;
+    public static int GOOD = 0xFF059669;
+    public static int ON_PRIMARY = 0xFFFFFFFF;   // primary 上の文字色
+    public static int EDIT_BG = 0xFFF9FAFB;      // 入力欄・サブボタンの背景
+    public static int HINT = 0xFF9CA3AF;         // ヒント・無効文字
+    public static boolean DARK = false;          // 現在ダークパレットか
 
     private Ui() {}
+
+    /** テーマパレットを反映する。 */
+    public static void applyTheme(Themes.Palette p) {
+        BG = p.bg; SURFACE = p.surface; BORDER = p.border;
+        PRIMARY = p.primary; PRIMARY_SOFT = p.primarySoft; ON_PRIMARY = p.onPrimary;
+        TEXT = p.text; MUTED = p.muted; DANGER = p.danger; GOOD = p.good;
+        EDIT_BG = p.editBg; HINT = p.hint; DARK = p.dark;
+    }
+
+    /** テーマに追従したダイアログビルダー。 */
+    public static AlertDialog.Builder dialog(Context context) {
+        return new AlertDialog.Builder(context, pickerTheme());
+    }
+
+    public static int pickerTheme() {
+        return DARK ? android.R.style.Theme_Material_Dialog_Alert
+                : android.R.style.Theme_Material_Light_Dialog_Alert;
+    }
 
     public static int dp(Context context, int dp) {
         return Math.round(dp * context.getResources().getDisplayMetrics().density);
@@ -44,6 +69,19 @@ public final class Ui {
         root.setPadding(pad, dp(activity, 12), pad, dp(activity, 40));
         scroll.addView(root);
         activity.setContentView(scroll);
+
+        activity.getWindow().setBackgroundDrawable(new ColorDrawable(BG));
+        activity.getWindow().setStatusBarColor(BG);
+        activity.getWindow().setNavigationBarColor(BG);
+        View decor = activity.getWindow().getDecorView();
+        int flags = decor.getSystemUiVisibility();
+        if (!DARK) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        } else {
+            flags &= ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        }
+        decor.setSystemUiVisibility(flags);
+
         return root;
     }
 
@@ -107,7 +145,7 @@ public final class Ui {
     public static Button primaryButton(Context context, String text) {
         Button b = baseButton(context, text);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setTextColor(0xFFFFFFFF);
+        b.setTextColor(ON_PRIMARY);
         b.setBackground(ripple(rounded(PRIMARY, 0, dp(context, 12)), 0x33FFFFFF));
         return b;
     }
@@ -116,7 +154,7 @@ public final class Ui {
     public static Button button(Context context, String text) {
         Button b = baseButton(context, text);
         b.setTextColor(TEXT);
-        b.setBackground(ripple(rounded(0xFFF9FAFB, BORDER, dp(context, 12)), 0x14000000));
+        b.setBackground(ripple(rounded(EDIT_BG, BORDER, dp(context, 12)), DARK ? 0x24FFFFFF : 0x14000000));
         return b;
     }
 
@@ -125,7 +163,7 @@ public final class Ui {
         Button b = baseButton(context, text);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setTextColor(PRIMARY);
-        b.setBackground(ripple(rounded(PRIMARY_SOFT, 0, dp(context, 12)), 0x224F46E5));
+        b.setBackground(ripple(rounded(PRIMARY_SOFT, 0, dp(context, 12)), (PRIMARY & 0x00FFFFFF) | 0x22000000));
         return b;
     }
 
@@ -138,7 +176,7 @@ public final class Ui {
         b.setMinimumWidth(dp(context, 44));
         b.setPadding(0, 0, 0, 0);
         b.setTextColor(TEXT);
-        b.setBackground(ripple(rounded(0xFFF9FAFB, BORDER, dp(context, 12)), 0x14000000));
+        b.setBackground(ripple(rounded(EDIT_BG, BORDER, dp(context, 12)), DARK ? 0x24FFFFFF : 0x14000000));
         return b;
     }
 
@@ -171,13 +209,13 @@ public final class Ui {
     public static void setChipSelected(Button chip, boolean selected) {
         Context context = chip.getContext();
         if (selected) {
-            chip.setTextColor(0xFFFFFFFF);
+            chip.setTextColor(ON_PRIMARY);
             chip.setTypeface(Typeface.DEFAULT_BOLD);
             chip.setBackground(ripple(rounded(PRIMARY, 0, dp(context, 19)), 0x33FFFFFF));
         } else {
             chip.setTextColor(TEXT);
             chip.setTypeface(Typeface.DEFAULT);
-            chip.setBackground(ripple(rounded(SURFACE, BORDER, dp(context, 19)), 0x14000000));
+            chip.setBackground(ripple(rounded(SURFACE, BORDER, dp(context, 19)), DARK ? 0x24FFFFFF : 0x14000000));
         }
     }
 
@@ -190,13 +228,50 @@ public final class Ui {
         return et;
     }
 
-    public static EditText numberEdit(Context context, String hint, int ems) {
+    public static EditText numberEdit(Context context, String hint, int maxValue) {
         EditText et = new EditText(context);
         et.setHint(hint);
-        et.setEms(ems);
         et.setSingleLine(true);
-        et.setInputType(InputType.TYPE_CLASS_NUMBER);
-        style(et);
+        // 全角数字の入力も受け付けるため TEXT にし、TextWatcher で半角数字のみに正規化する
+        et.setInputType(InputType.TYPE_CLASS_TEXT);
+        et.setTextSize(15);
+        et.setTextColor(TEXT);
+        et.setHintTextColor(HINT);
+        et.setBackground(rounded(EDIT_BG, BORDER, dp(context, 10)));
+        int padH = dp(context, 12);
+        int padV = dp(context, 10);
+        et.setPadding(padH, padV, padH, padV);
+        et.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(context, 72), LinearLayout.LayoutParams.WRAP_CONTENT);
+        et.setLayoutParams(lp);
+        et.addTextChangedListener(new TextWatcher() {
+            private boolean editing;
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) {
+                if (editing) return;
+                String raw = s.toString();
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < raw.length() && sb.length() < 4; i++) {
+                    char ch = raw.charAt(i);
+                    if (ch >= '0' && ch <= '9') sb.append(ch);
+                    else if (ch >= '０' && ch <= '９') sb.append((char) ('0' + (ch - '０')));
+                }
+                String cleaned = sb.toString();
+                if (!cleaned.isEmpty()) {
+                    try {
+                        if (Integer.parseInt(cleaned) > maxValue) cleaned = String.valueOf(maxValue);
+                    } catch (NumberFormatException e) {
+                        cleaned = "";
+                    }
+                }
+                if (!cleaned.equals(raw)) {
+                    editing = true;
+                    s.replace(0, s.length(), cleaned);
+                    editing = false;
+                }
+            }
+        });
         return et;
     }
 
@@ -215,7 +290,7 @@ public final class Ui {
     public static void tappable(View v) {
         v.setClickable(true);
         v.setBackground(new RippleDrawable(
-                ColorStateList.valueOf(0x14000000), null,
+                ColorStateList.valueOf(DARK ? 0x24FFFFFF : 0x14000000), null,
                 new ColorDrawable(0xFFFFFFFF)));
     }
 
@@ -223,8 +298,8 @@ public final class Ui {
         Context context = et.getContext();
         et.setTextSize(15);
         et.setTextColor(TEXT);
-        et.setHintTextColor(0xFF9CA3AF);
-        et.setBackground(rounded(0xFFF9FAFB, BORDER, dp(context, 10)));
+        et.setHintTextColor(HINT);
+        et.setBackground(rounded(EDIT_BG, BORDER, dp(context, 10)));
         int padH = dp(context, 12);
         int padV = dp(context, 10);
         et.setPadding(padH, padV, padH, padV);
@@ -250,7 +325,7 @@ public final class Ui {
 
     public static void addDivider(Context context, LinearLayout parent) {
         View v = new View(context);
-        v.setBackgroundColor(0xFFF3F4F6);
+        v.setBackgroundColor(BG);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dp(context, 1)));
         lp.topMargin = dp(context, 8);
