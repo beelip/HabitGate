@@ -64,12 +64,12 @@ public final class CsvBackupManager {
         sb.append("# habit_gate_csv_v1\n");
 
         appendSection(sb, "do_tasks",
-                "id,title,note,planned_date,created_at,active",
-                query(db, "SELECT id,title,note,planned_date,created_at,active FROM do_tasks ORDER BY id ASC"));
+                "id,title,note,planned_date,created_at,active,completed,completed_date",
+                query(db, "SELECT id,title,note,planned_date,created_at,active,completed,completed_date FROM do_tasks ORDER BY id ASC"));
 
         appendSection(sb, "reduce_items",
-                "id,title,note,created_at,active",
-                query(db, "SELECT id,title,note,created_at,active FROM reduce_items ORDER BY id ASC"));
+                "id,title,note,app_package,gauge_max_minutes,created_at,active",
+                query(db, "SELECT id,title,note,app_package,gauge_max_minutes,created_at,active FROM reduce_items ORDER BY id ASC"));
 
         appendSection(sb, "records",
                 "id,category,title,note,duration_minutes,actual_date,created_at,synced",
@@ -324,6 +324,8 @@ public final class CsvBackupManager {
             v.put("planned_date", str(row, "planned_date", DateTools.today()));
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("active", integer(row, "active", 1));
+            v.put("completed", integer(row, "completed", 0));
+            v.put("completed_date", str(row, "completed_date"));
             db.insert("do_tasks", null, v);
             count++;
         }
@@ -338,6 +340,8 @@ public final class CsvBackupManager {
             putId(v, row);
             v.put("title", str(row, "title"));
             v.put("note", str(row, "note"));
+            v.put("app_package", str(row, "app_package"));
+            v.put("gauge_max_minutes", integer(row, "gauge_max_minutes", 480));
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("active", integer(row, "active", 1));
             db.insert("reduce_items", null, v);

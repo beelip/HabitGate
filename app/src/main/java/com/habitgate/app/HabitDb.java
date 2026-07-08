@@ -15,7 +15,7 @@ import java.util.List;
 public class HabitDb extends SQLiteOpenHelper {
     // データ保持のため、旧版と同じ DB 名を維持する。
     private static final String DB_NAME = "friction_habit.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 4;
     public static final String CATEGORY_DO = "DO";
     public static final String CATEGORY_REDUCE = "REDUCE";
 
@@ -31,14 +31,18 @@ public class HabitDb extends SQLiteOpenHelper {
                 "note TEXT NOT NULL DEFAULT ''," +
                 "planned_date TEXT NOT NULL," +
                 "created_at INTEGER NOT NULL," +
-                "active INTEGER NOT NULL DEFAULT 1" +
+                "active INTEGER NOT NULL DEFAULT 1," +
+                "completed INTEGER NOT NULL DEFAULT 0," +
+                "completed_date TEXT NOT NULL DEFAULT ''" +
                 ")");
         db.execSQL("CREATE TABLE reduce_items (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "title TEXT NOT NULL," +
                 "note TEXT NOT NULL DEFAULT ''," +
+                "app_package TEXT NOT NULL DEFAULT ''," +
                 "created_at INTEGER NOT NULL," +
-                "active INTEGER NOT NULL DEFAULT 1" +
+                "active INTEGER NOT NULL DEFAULT 1," +
+                "gauge_max_minutes INTEGER NOT NULL DEFAULT 480" +
                 ")");
         db.execSQL("CREATE TABLE records (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -68,6 +72,22 @@ public class HabitDb extends SQLiteOpenHelper {
             }
             createCyclesTable(db);
             ensureActiveCycle(db);
+        }
+        if (oldVersion < 3) {
+            if (!hasColumn(db, "reduce_items", "app_package")) {
+                db.execSQL("ALTER TABLE reduce_items ADD COLUMN app_package TEXT NOT NULL DEFAULT ''");
+            }
+        }
+        if (oldVersion < 4) {
+            if (!hasColumn(db, "do_tasks", "completed")) {
+                db.execSQL("ALTER TABLE do_tasks ADD COLUMN completed INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!hasColumn(db, "do_tasks", "completed_date")) {
+                db.execSQL("ALTER TABLE do_tasks ADD COLUMN completed_date TEXT NOT NULL DEFAULT ''");
+            }
+            if (!hasColumn(db, "reduce_items", "gauge_max_minutes")) {
+                db.execSQL("ALTER TABLE reduce_items ADD COLUMN gauge_max_minutes INTEGER NOT NULL DEFAULT 480");
+            }
         }
     }
 
@@ -213,12 +233,43 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.ReduceItem> getActiveReduceItems() {
         ArrayList<Models.ReduceItem> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,title,note FROM reduce_items WHERE active=1 ORDER BY id ASC", null)) {
+                "SELECT id,title,note,app_package,gauge_max_minutes FROM reduce_items WHERE active=1 ORDER BY id ASC", null)) {
             while (c.moveToNext()) {
-                list.add(new Models.ReduceItem(c.getLong(0), c.getString(1), c.getString(2)));
+                list.add(new Models.ReduceItem(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4)));
             }
         }
         return list;
+    }
+
+    public Models.ReduceItem getReduceItem(long id) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id,title,note,app_package,gauge_max_minutes FROM reduce_items WHERE id=?",
+                new String[]{String.valueOf(id)})) {
+            if (c.moveToFirst()) {
+                return new Models.ReduceItem(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4));
+            }
+        }
+        return null;
+    }
+
+    public void setReduceItemAppPackage(long id, String appPackage) {
+        ContentValues v = new ContentValues();
+        v.put("app_package", appPackage == null ? "" : appPackage.trim());
+        getWritableDatabase().update("reduce_items", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public void setReduceItemGaugeMax(long id, int minutes) {
+        ContentValues v = new ContentValues();
+        v.put("gauge_max_minutes", Math.max(1, minutes));
+        getWritableDatabase().update("reduce_items", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public boolean hasRecordOn(String category, String title, String actualDate) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM records WHERE category=? AND title=? AND actual_date=?",
+                new String[]{category, title, actualDate})) {
+            return c.moveToFirst() && c.getInt(0) > 0;
+        }
     }
 
     public long addRecord(String category, String title, int durationMinutes, String actualDate) {
@@ -237,10 +288,48 @@ public class HabitDb extends SQLiteOpenHelper {
         return getWritableDatabase().insert("records", null, v);
     }
 
-    public void completeDoTask(long id) {
+    public void completeDoTask(long id, String completedDate) {
         ContentValues v = new ContentValues();
         v.put("active", 0);
+        v.put("completed", 1);
+        v.put("completed_date", completedDate);
         getWritableDatabase().update("do_tasks", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public Models.Task getDoTask(long id) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id,title,planned_date,note FROM do_tasks WHERE id=?",
+                new String[]{String.valueOf(id)})) {
+            if (c.moveToFirst()) {
+                return new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3));
+            }
+        }
+        return null;
+    }
+
+    public List<Models.CompletedTask> getCompletedTaskTotals(String from, String to) {
+        ArrayList<Models.CompletedTask> list = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT t.title, t.completed_date, IFNULL(SUM(r.duration_minutes),0) " +
+                        "FROM do_tasks t " +
+                        "LEFT JOIN records r ON r.category='DO' AND r.title=t.title " +
+                        "WHERE t.completed=1 AND t.completed_date>=? AND t.completed_date<=? " +
+                        "GROUP BY t.id ORDER BY t.completed_date DESC, t.id DESC",
+                new String[]{from, to})) {
+            while (c.moveToNext()) {
+                list.add(new Models.CompletedTask(c.getString(0), c.getString(1), c.getInt(2)));
+            }
+        }
+        return list;
+    }
+
+    public int getReduceMinutesOn(String title, String actualDate) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT IFNULL(SUM(duration_minutes),0) FROM records WHERE category='REDUCE' AND title=? AND actual_date=?",
+                new String[]{title, actualDate})) {
+            if (c.moveToFirst()) return c.getInt(0);
+        }
+        return 0;
     }
 
     public void carryOverDoTask(long id, String nextDate) {
