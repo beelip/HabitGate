@@ -23,12 +23,15 @@ public final class Models {
         public final String note;
         // 使用時間を自動計測する連携アプリのパッケージ名。未連携なら空文字。
         public final String appPackage;
+        // 使用時間バーの上限（分）。既定は 480 分（8時間）。
+        public final int gaugeMaxMinutes;
 
-        public ReduceItem(long id, String title, String note, String appPackage) {
+        public ReduceItem(long id, String title, String note, String appPackage, int gaugeMaxMinutes) {
             this.id = id;
             this.title = title;
             this.note = note == null ? "" : note;
             this.appPackage = appPackage == null ? "" : appPackage;
+            this.gaugeMaxMinutes = gaugeMaxMinutes > 0 ? gaugeMaxMinutes : 480;
         }
 
         public boolean hasLinkedApp() {
@@ -67,6 +70,18 @@ public final class Models {
             this.date = date;
             this.doMinutes = doMinutes;
             this.reduceMinutes = reduceMinutes;
+        }
+    }
+
+    public static class CompletedTask {
+        public final String title;
+        public final String completedDate;
+        public final int minutes;
+
+        public CompletedTask(String title, String completedDate, int minutes) {
+            this.title = title;
+            this.completedDate = completedDate;
+            this.minutes = minutes;
         }
     }
 

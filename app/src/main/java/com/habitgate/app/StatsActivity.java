@@ -3,6 +3,8 @@ package com.habitgate.app;
 import android.app.DatePickerDialog;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -20,13 +22,50 @@ public class StatsActivity extends android.app.Activity {
     private Button weekChip;
     private Button monthChip;
     private Button dateChip;
+    private GestureDetector gestureDetector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         db = new HabitDb(this);
+        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                if (e1 == null || e2 == null) return false;
+                float dx = e2.getX() - e1.getX();
+                float dy = e2.getY() - e1.getY();
+                if (Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > Ui.dp(StatsActivity.this, 60)) {
+                    swipeMode(dx < 0 ? 1 : -1);
+                    return true;
+                }
+                return false;
+            }
+        });
         buildUi();
         refresh();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        gestureDetector.onTouchEvent(ev);
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private void swipeMode(int delta) {
+        String[] order = {"day", "week", "month"};
+        int index = "date".equals(mode) ? 0 : indexOf(order, mode);
+        int next = Math.max(0, Math.min(order.length - 1, index + delta));
+        if (!order[next].equals(mode)) {
+            mode = order[next];
+            refresh();
+        }
+    }
+
+    private int indexOf(String[] array, String value) {
+        for (int i = 0; i < array.length; i++) {
+            if (array[i].equals(value)) return i;
+        }
+        return 0;
     }
 
     private void buildUi() {
@@ -94,7 +133,7 @@ public class StatsActivity extends android.app.Activity {
         if ("day".equals(mode)) {
             from = active.cycleDate;
             to = active.cycleDate;
-            label = "現在の対象日";
+            label = "今日";
         } else if ("date".equals(mode) && pickedDate != null) {
             from = pickedDate;
             to = pickedDate;
@@ -111,6 +150,7 @@ public class StatsActivity extends android.app.Activity {
         chart.setTotals(totals);
         List<Models.Record> records = db.getRecords(from, to);
         List<Models.Cycle> cycles = db.getCycles(from, to);
+        List<Models.CompletedTask> completedTasks = db.getCompletedTaskTotals(from, to);
         list.removeAllViews();
 
         // 合計サマリー
@@ -128,6 +168,30 @@ public class StatsActivity extends android.app.Activity {
         summaryRow.addView(summaryCell("減らすこと", reduceTotal, Ui.DANGER),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         summaryCard.addView(summaryRow);
+
+        // 完了したタスク
+        list.addView(Ui.section(this, "完了したタスク"));
+        LinearLayout completedCard = Ui.card(this, list);
+        if (completedTasks.isEmpty()) {
+            completedCard.addView(Ui.note(this, "この期間に完了したタスクはありません。"));
+        } else {
+            for (Models.CompletedTask ct : completedTasks) {
+                LinearLayout row = Ui.horizontal(this);
+                TextView left = new TextView(this);
+                left.setText(DateTools.formatShortDateWithWeekday(ct.completedDate) + "  " + ct.title);
+                left.setTextSize(14);
+                left.setTextColor(Ui.TEXT);
+                row.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+                TextView right = new TextView(this);
+                right.setText(DateTools.formatMinutes(ct.minutes));
+                right.setTextSize(14);
+                right.setTextColor(Ui.TEXT);
+                right.setGravity(android.view.Gravity.END);
+                row.addView(right, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
+                completedCard.addView(row);
+            }
+        }
 
         // 実績一覧
         list.addView(Ui.section(this, label + "の記録"));
@@ -148,13 +212,21 @@ public class StatsActivity extends android.app.Activity {
                     recordsCard.addView(date);
                 }
                 boolean isDo = HabitDb.CATEGORY_DO.equals(r.category);
-                TextView row = new TextView(this);
-                String text = (isDo ? "✅ " : "⚠ ") + r.title + " / " + DateTools.formatMinutes(r.durationMinutes) + (r.synced ? "" : " / 未同期");
-                if (!r.note.isEmpty()) text += "\n　メモ: " + r.note;
-                row.setText(text);
-                row.setTextSize(14);
-                row.setTextColor(Ui.TEXT);
+                LinearLayout row = Ui.horizontal(this);
                 row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
+                TextView left = new TextView(this);
+                String text = (isDo ? "✅ " : "⚠ ") + r.title;
+                if (!r.note.isEmpty()) text += "\n　メモ: " + r.note;
+                left.setText(text);
+                left.setTextSize(14);
+                left.setTextColor(Ui.TEXT);
+                row.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+                TextView right = new TextView(this);
+                right.setText(DateTools.formatMinutes(r.durationMinutes));
+                right.setTextSize(14);
+                right.setTextColor(Ui.TEXT);
+                right.setGravity(android.view.Gravity.END);
+                row.addView(right, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
                 recordsCard.addView(row);
             }
         }
@@ -168,7 +240,7 @@ public class StatsActivity extends android.app.Activity {
             for (Models.Cycle c : cycles) {
                 TextView row = new TextView(this);
                 String end = c.closed ? DateTools.formatDateTime(c.endAt) : "進行中";
-                row.setText("・" + DateTools.formatDisplayDate(c.cycleDate) + "\n　開始: " + DateTools.formatDateTime(c.startAt) + " / 終了: " + end + (c.synced ? "" : " / 未同期"));
+                row.setText("・" + DateTools.formatDisplayDate(c.cycleDate) + "\n　開始: " + DateTools.formatDateTime(c.startAt) + " / 終了: " + end);
                 row.setTextSize(14);
                 row.setTextColor(Ui.TEXT);
                 row.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));

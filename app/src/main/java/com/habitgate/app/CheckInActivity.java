@@ -248,7 +248,7 @@ public class CheckInActivity extends android.app.Activity {
                 records++;
             }
             if (row.completeCheck.isChecked()) {
-                db.completeDoTask(row.task.id);
+                db.completeDoTask(row.task.id, targetDate);
                 completed++;
             }
         }
@@ -271,24 +271,9 @@ public class CheckInActivity extends android.app.Activity {
             ReminderScheduler.scheduleNext(this);
             extra += " / 次の対象日: " + DateTools.formatDisplayDate(next.cycleDate);
         }
-        SheetsSync.syncUnsynced(this, false);
-        if (closeAfterSave) {
-            extra += updateConfiguredCsvBackupMessage();
-        }
+        AutoSync.run(this);
         Toast.makeText(this, "保存しました: 実績" + records + "件 / 完了" + completed + "件" + extra, Toast.LENGTH_LONG).show();
         finish();
-    }
-
-    private String updateConfiguredCsvBackupMessage() {
-        if (!CsvBackupManager.hasBackupDirectory(this)) {
-            return "";
-        }
-        try {
-            CsvBackupManager.writeBackupToConfiguredDirectory(this);
-            return " / CSV更新: 完了";
-        } catch (Exception e) {
-            return " / CSV更新: 失敗";
-        }
     }
 
     private String mergeNotes(String itemNote, String actualNote) {

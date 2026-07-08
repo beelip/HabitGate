@@ -2,19 +2,16 @@ package com.habitgate.app;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public class MainActivity extends android.app.Activity {
@@ -23,10 +20,6 @@ public class MainActivity extends android.app.Activity {
     private LinearLayout reduceList;
     private TextView cycleDateText;
     private TextView cycleStartText;
-    private EditText addDoTitle;
-    private EditText addDoNote;
-    private EditText addReduceTitle;
-    private EditText addReduceNote;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,6 +34,7 @@ public class MainActivity extends android.app.Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        CycleAutoCloser.closeIfDueAndReschedule(this);
         refreshLists();
     }
 
@@ -59,9 +53,9 @@ public class MainActivity extends android.app.Activity {
         cycleStartText = Ui.note(this, "");
         cycleCard.addView(cycleStartText);
 
-        Button checkIn = Ui.primaryButton(this, "この日の入力を開く");
-        checkIn.setOnClickListener(v -> startActivity(new Intent(this, CheckInActivity.class)));
-        cycleCard.addView(checkIn);
+        Button editTasks = Ui.primaryButton(this, "タスク編集");
+        editTasks.setOnClickListener(v -> startActivity(new Intent(this, TaskEditActivity.class)));
+        cycleCard.addView(editTasks);
         Ui.space(this, cycleCard, 8);
 
         Button closeDay = Ui.tonalButton(this, "一日を終えて次の日へ");
@@ -82,81 +76,16 @@ public class MainActivity extends android.app.Activity {
         // やること
         root.addView(Ui.section(this, "やること"));
         LinearLayout doCard = Ui.card(this, root);
-        addDoTitle = Ui.edit(this, "例: 30分走る / PM過去問1問");
-        addDoNote = Ui.edit(this, "メモ（任意）");
-        doCard.addView(addDoTitle);
-        doCard.addView(addDoNote);
-        LinearLayout addDoButtons = Ui.horizontal(this);
-        Button addDoToday = Ui.tonalButton(this, "今日やる");
-        addDoToday.setOnClickListener(v -> addDoTaskForDate(db.getCurrentCycle().cycleDate));
-        Button addDoNext = Ui.tonalButton(this, "明日やる");
-        addDoNext.setOnClickListener(v -> addDoTaskForDate(DateTools.nextDay(db.getCurrentCycle().cycleDate)));
-        Button addDoByDate = Ui.iconButton(this, "📅");
-        addDoByDate.setContentDescription("日付を選んで追加");
-        addDoByDate.setOnClickListener(v -> openTaskDatePicker());
-        LinearLayout.LayoutParams grow = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        grow.rightMargin = Ui.dp(this, 8);
-        LinearLayout.LayoutParams grow2 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        grow2.rightMargin = Ui.dp(this, 8);
-        addDoButtons.addView(addDoToday, grow);
-        addDoButtons.addView(addDoNext, grow2);
-        addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        doCard.addView(addDoButtons);
-
         doList = Ui.vertical(this);
         doCard.addView(doList);
 
         // 減らすこと
         root.addView(Ui.section(this, "減らすこと"));
         LinearLayout reduceCard = Ui.card(this, root);
-        addReduceTitle = Ui.edit(this, "例: Twitter / 夜更かし / 食べ過ぎ");
-        addReduceNote = Ui.edit(this, "メモ（任意）");
-        reduceCard.addView(addReduceTitle);
-        reduceCard.addView(addReduceNote);
-        Button addReduceButton = Ui.tonalButton(this, "追加");
-        addReduceButton.setOnClickListener(v -> addReduceItem());
-        reduceCard.addView(addReduceButton);
-        reduceCard.addView(Ui.note(this, "📱 でアプリを連携すると、そのアプリの使用時間を自動計測します。"));
-
         reduceList = Ui.vertical(this);
         reduceCard.addView(reduceList);
 
         refreshLists();
-    }
-
-    private void openTaskDatePicker() {
-        Models.Cycle cycle = db.getCurrentCycle();
-        LocalDate initial = DateTools.parseOrToday(cycle.cycleDate).plusDays(1);
-        new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
-            LocalDate selected = LocalDate.of(year, month + 1, dayOfMonth);
-            addDoTaskForDate(selected.format(DateTools.DATE));
-        }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
-    }
-
-    private void addDoTaskForDate(String plannedDate) {
-        String title = addDoTitle.getText().toString().trim();
-        if (title.isEmpty()) {
-            Toast.makeText(this, "タスク名を入力してください", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        db.addDoTask(title, addDoNote.getText().toString(), plannedDate);
-        addDoTitle.setText("");
-        addDoNote.setText("");
-        refreshLists();
-        Toast.makeText(this, DateTools.formatShortDateWithWeekday(plannedDate) + " に追加しました", Toast.LENGTH_SHORT).show();
-    }
-
-    private void addReduceItem() {
-        String title = addReduceTitle.getText().toString().trim();
-        if (title.isEmpty()) {
-            Toast.makeText(this, "項目名を入力してください", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        db.addReduceItem(title, addReduceNote.getText().toString());
-        addReduceTitle.setText("");
-        addReduceNote.setText("");
-        refreshLists();
-        Toast.makeText(this, "追加しました", Toast.LENGTH_SHORT).show();
     }
 
     private void confirmCloseCurrentCycle() {
@@ -174,21 +103,10 @@ public class MainActivity extends android.app.Activity {
         int auto = AppUsage.autoRecordLinkedApps(this, db, current.cycleDate);
         Models.Cycle next = db.endCurrentCycleAndStartNext();
         ReminderScheduler.scheduleNext(this);
-        SheetsSync.syncUnsynced(this, false);
-        String backupMessage = updateConfiguredCsvBackup();
+        AutoSync.run(this);
         refreshLists();
         String autoMessage = auto > 0 ? " / 自動計測" + auto + "件" : "";
-        Toast.makeText(this, "一日を終了しました。次の対象日: " + DateTools.formatDisplayDate(next.cycleDate) + autoMessage + backupMessage, Toast.LENGTH_LONG).show();
-    }
-
-    private String updateConfiguredCsvBackup() {
-        if (!CsvBackupManager.hasBackupDirectory(this)) return "";
-        try {
-            CsvBackupManager.writeBackupToConfiguredDirectory(this);
-            return " / CSV更新: 完了";
-        } catch (Exception e) {
-            return " / CSV更新: 失敗";
-        }
+        Toast.makeText(this, "一日を終了しました。次の対象日: " + DateTools.formatDisplayDate(next.cycleDate) + autoMessage, Toast.LENGTH_LONG).show();
     }
 
     private void refreshLists() {
@@ -200,21 +118,24 @@ public class MainActivity extends android.app.Activity {
         doList.removeAllViews();
         List<Models.Task> tasks = db.getActiveDoTasks();
         if (tasks.isEmpty()) {
-            doList.addView(Ui.note(this, "登録されているやることはありません。"));
+            doList.addView(Ui.note(this, "やることはありません。「タスク編集」から追加できます。"));
         } else {
             for (Models.Task t : tasks) {
                 Ui.addDivider(this, doList);
                 LinearLayout row = Ui.horizontal(this);
+                Ui.tappable(row);
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    intent.putExtra("task_id", t.id);
+                    startActivity(intent);
+                });
                 String text = DateTools.formatShortDateWithWeekday(t.plannedDate) + "  " + t.title;
                 if (!t.note.isEmpty()) text += "\nメモ: " + t.note;
                 row.addView(Ui.body(this, text), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-                Button del = Ui.iconButton(this, "🗑");
-                del.setContentDescription("削除");
-                del.setOnClickListener(v -> confirmDelete("やること", t.title, () -> {
-                    db.deleteDoTask(t.id);
-                    refreshLists();
-                }));
-                row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+                Button carryOver = Ui.iconButton(this, "→");
+                carryOver.setContentDescription("翌日に繰り越す");
+                carryOver.setOnClickListener(v -> confirmCarryOver(t, cycle));
+                row.addView(carryOver, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
                 doList.addView(row);
             }
         }
@@ -222,84 +143,69 @@ public class MainActivity extends android.app.Activity {
         reduceList.removeAllViews();
         List<Models.ReduceItem> items = db.getActiveReduceItems();
         if (items.isEmpty()) {
-            reduceList.addView(Ui.note(this, "登録されている減らすことはありません。"));
+            reduceList.addView(Ui.note(this, "減らすことはありません。「タスク編集」から追加できます。"));
         } else {
             for (Models.ReduceItem item : items) {
                 Ui.addDivider(this, reduceList);
-                LinearLayout row = Ui.horizontal(this);
-                String text = item.title;
-                if (item.hasLinkedApp()) text += "\n📱 " + AppUsage.appLabel(this, item.appPackage);
-                if (!item.note.isEmpty()) text += "\nメモ: " + item.note;
-                row.addView(Ui.body(this, text), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-                Button link = Ui.iconButton(this, "📱");
-                link.setContentDescription("アプリを連携");
-                link.setOnClickListener(v -> openAppLinkDialog(item));
-                LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT);
-                iconLp.rightMargin = Ui.dp(this, 6);
-                row.addView(link, iconLp);
-                Button del = Ui.iconButton(this, "🗑");
-                del.setContentDescription("削除");
-                del.setOnClickListener(v -> confirmDelete("減らすこと", item.title, () -> {
-                    db.deleteReduceItem(item.id);
-                    refreshLists();
-                }));
-                row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout row = Ui.vertical(this);
+                Ui.tappable(row);
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, ReduceEntryActivity.class);
+                    intent.putExtra("item_id", item.id);
+                    startActivity(intent);
+                });
+
+                TextView titleView = new TextView(this);
+                titleView.setText(item.title);
+                titleView.setTextSize(15);
+                titleView.setTypeface(Typeface.DEFAULT_BOLD);
+                titleView.setTextColor(Ui.TEXT);
+                row.addView(titleView);
+
+                int minutes;
+                String status;
+                if (item.hasLinkedApp()) {
+                    String appLabel = AppUsage.appLabel(this, item.appPackage);
+                    if (AppUsage.hasPermission(this)) {
+                        minutes = AppUsage.foregroundMinutesOn(this, item.appPackage, cycle.cycleDate);
+                        status = "📱 " + appLabel + " ・ 今日 " + DateTools.formatMinutes(minutes);
+                    } else {
+                        minutes = 0;
+                        status = "📱 " + appLabel + " ・ 計測には権限が必要";
+                    }
+                } else {
+                    minutes = db.getReduceMinutesOn(item.title, cycle.cycleDate);
+                    status = "今日 " + DateTools.formatMinutes(minutes);
+                }
+                TextView statusView = new TextView(this);
+                statusView.setText(status);
+                statusView.setTextSize(13);
+                statusView.setTextColor(Ui.MUTED);
+                row.addView(statusView);
+
+                UsageBarView bar = new UsageBarView(this);
+                bar.setValues(minutes, item.gaugeMaxMinutes);
+                LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 10));
+                barLp.topMargin = Ui.dp(this, 4);
+                barLp.bottomMargin = Ui.dp(this, 4);
+                row.addView(bar, barLp);
+
                 reduceList.addView(row);
             }
         }
     }
 
-    private void openAppLinkDialog(Models.ReduceItem item) {
-        List<AppUsage.AppEntry> apps = AppUsage.launchableApps(this);
-        String[] labels = new String[apps.size() + 1];
-        labels[0] = item.hasLinkedApp()
-                ? "連携を解除（現在: " + AppUsage.appLabel(this, item.appPackage) + "）"
-                : "連携しない（手動入力のみ）";
-        for (int i = 0; i < apps.size(); i++) labels[i + 1] = apps.get(i).label;
+    private void confirmCarryOver(Models.Task t, Models.Cycle cycle) {
+        String nextDate = DateTools.nextDay(DateTools.maxDate(t.plannedDate, cycle.cycleDate));
         new AlertDialog.Builder(this)
-                .setTitle("「" + item.title + "」に連携するアプリ")
-                .setItems(labels, (dialog, which) -> {
-                    if (which == 0) {
-                        db.setReduceItemAppPackage(item.id, "");
-                        refreshLists();
-                        Toast.makeText(this, "連携を解除しました", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    AppUsage.AppEntry entry = apps.get(which - 1);
-                    db.setReduceItemAppPackage(item.id, entry.packageName);
+                .setTitle("翌日に繰り越しますか？")
+                .setMessage("「" + t.title + "」を " + DateTools.formatShortDateWithWeekday(nextDate) + " に移動します。")
+                .setPositiveButton("繰り越す", (dialog, which) -> {
+                    db.carryOverDoTask(t.id, nextDate);
+                    AutoSync.run(this);
                     refreshLists();
-                    if (AppUsage.hasPermission(this)) {
-                        Toast.makeText(this, entry.label + " を連携しました", Toast.LENGTH_SHORT).show();
-                    } else {
-                        promptUsageAccess(entry.label);
-                    }
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
-    }
-
-    private void promptUsageAccess(String appLabel) {
-        new AlertDialog.Builder(this)
-                .setTitle("使用状況へのアクセスが必要です")
-                .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
-                .setPositiveButton("設定を開く", (dialog, which) -> {
-                    try {
-                        startActivity(AppUsage.usageAccessSettingsIntent());
-                    } catch (Exception e) {
-                        Toast.makeText(this, "設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("あとで", null)
-                .show();
-    }
-
-    private void confirmDelete(String type, String title, Runnable onConfirm) {
-        new AlertDialog.Builder(this)
-                .setTitle(type + "を削除しますか？")
-                .setMessage("「" + title + "」を削除します。")
-                .setPositiveButton("削除", (dialog, which) -> {
-                    onConfirm.run();
-                    Toast.makeText(this, "削除しました", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "繰り越しました", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("キャンセル", null)
                 .show();

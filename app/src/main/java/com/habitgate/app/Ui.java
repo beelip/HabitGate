@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.text.InputType;
@@ -197,6 +198,25 @@ public final class Ui {
         et.setInputType(InputType.TYPE_CLASS_NUMBER);
         style(et);
         return et;
+    }
+
+    public static EditText multilineEdit(Context context, String hint) {
+        EditText et = new EditText(context);
+        et.setHint(hint);
+        et.setSingleLine(false);
+        et.setMinLines(4);
+        et.setGravity(Gravity.TOP);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        style(et);
+        return et;
+    }
+
+    /** 行タップのリップルを付ける。 */
+    public static void tappable(View v) {
+        v.setClickable(true);
+        v.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(0x14000000), null,
+                new ColorDrawable(0xFFFFFFFF)));
     }
 
     private static void style(EditText et) {

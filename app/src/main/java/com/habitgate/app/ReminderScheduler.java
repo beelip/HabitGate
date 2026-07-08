@@ -19,8 +19,10 @@ public final class ReminderScheduler {
     public static final String PREFS = "friction_habit_settings";
     public static final String KEY_REMINDER_TIME = "reminder_time";
     public static final String KEY_WEBHOOK_URL = "webhook_url";
+    public static final String KEY_AUTO_CLOSE_TIME = "auto_close_time";
     public static final String CHANNEL_ID = "daily_check_in";
     public static final int REQUEST_ALARM = 7710;
+    public static final int REQUEST_AUTO_CLOSE = 7711;
 
     private ReminderScheduler() {}
 
@@ -43,6 +45,15 @@ public final class ReminderScheduler {
 
     public static void saveWebhookUrl(Context context, String url) {
         prefs(context).edit().putString(KEY_WEBHOOK_URL, url == null ? "" : url.trim()).apply();
+    }
+
+    public static String autoCloseTime(Context context) {
+        return prefs(context).getString(KEY_AUTO_CLOSE_TIME, "05:00");
+    }
+
+    public static void saveAutoCloseTime(Context context, int hour, int minute) {
+        prefs(context).edit().putString(KEY_AUTO_CLOSE_TIME, DateTools.formatTime(hour, minute)).apply();
+        CycleAutoCloser.closeIfDueAndReschedule(context);
     }
 
     public static void createNotificationChannel(Context context) {

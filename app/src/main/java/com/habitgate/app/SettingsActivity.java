@@ -24,6 +24,7 @@ public class SettingsActivity extends android.app.Activity {
     private static final int REQUEST_IMPORT_CSV = 202;
 
     private Button reminderButton;
+    private Button autoCloseButton;
     private TextView backupInfo;
     private TextView sheetsInfo;
     private TextView usageInfo;
@@ -50,6 +51,11 @@ public class SettingsActivity extends android.app.Activity {
         reminderButton = Ui.button(this, "通知時刻: " + ReminderScheduler.reminderTime(this));
         reminderButton.setOnClickListener(v -> openTimePicker());
         notifyCard.addView(reminderButton);
+        Ui.space(this, notifyCard, 8);
+        autoCloseButton = Ui.button(this, "一日の自動終了時刻: " + ReminderScheduler.autoCloseTime(this));
+        autoCloseButton.setOnClickListener(v -> openAutoCloseTimePicker());
+        notifyCard.addView(autoCloseButton);
+        notifyCard.addView(Ui.note(this, "設定時刻を過ぎると、その日のサイクルを自動で終了して次の日へ移ります。"));
         Ui.space(this, notifyCard, 8);
         Button exactAlarmButton = Ui.button(this, "正確なアラームの権限設定");
         exactAlarmButton.setOnClickListener(v -> startActivity(ReminderScheduler.exactAlarmSettingsIntent(this)));
@@ -97,8 +103,8 @@ public class SettingsActivity extends android.app.Activity {
         LinearLayout sheetsCard = Ui.card(this, root);
         sheetsInfo = Ui.note(this, "");
         sheetsCard.addView(sheetsInfo);
-        Button configureSheets = Ui.button(this, "連携URLを設定");
-        configureSheets.setOnClickListener(v -> openWebhookDialog());
+        Button configureSheets = Ui.button(this, "連携先を設定");
+        configureSheets.setOnClickListener(v -> openWebhookWizard());
         sheetsCard.addView(configureSheets);
         sheetsCard.addView(Ui.note(this, "Google Apps Script の Web App URL を設定すると、未同期データを Google Sheets へ送信します。CSVバックアップとは独立して動作します。"));
 
@@ -124,26 +130,55 @@ public class SettingsActivity extends android.app.Activity {
         }, current[0], current[1], true).show();
     }
 
-    private void openWebhookDialog() {
-        EditText input = Ui.edit(this, "Google Apps Script Web App URL");
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        input.setText(ReminderScheduler.webhookUrl(this));
+    private void openAutoCloseTimePicker() {
+        int[] current = DateTools.parseTime(ReminderScheduler.autoCloseTime(this), 5, 0);
+        new TimePickerDialog(this, (view, hourOfDay, minute) -> {
+            ReminderScheduler.saveAutoCloseTime(this, hourOfDay, minute);
+            autoCloseButton.setText("一日の自動終了時刻: " + ReminderScheduler.autoCloseTime(this));
+            Toast.makeText(this, "自動終了時刻を設定しました", Toast.LENGTH_SHORT).show();
+        }, current[0], current[1], true).show();
+    }
+
+    private void openWebhookWizard() {
+        String current = ReminderScheduler.webhookUrl(this);
+        boolean configured = current != null && !current.trim().isEmpty();
+
         int pad = Ui.dp(this, 18);
         LinearLayout wrapper = Ui.vertical(this);
         wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
-        wrapper.addView(input);
-        wrapper.addView(Ui.note(this, "空欄で保存すると連携を解除します。"));
 
-        new AlertDialog.Builder(this)
-                .setTitle("スプレッドシート連携URL")
+        wrapper.addView(Ui.body(this, configured ? "現在: 連携済み" : "現在: 未設定"));
+        wrapper.addView(Ui.note(this, "1. Google スプレッドシートを開き、拡張機能 → Apps Script を開く\n2. tools/google-sheets-webhook.gs の内容を貼り付けてデプロイ（ウェブアプリ、全員がアクセス可）\n3. 発行された URL を下に貼り付けて保存"));
+
+        EditText input = Ui.edit(this, "Google Apps Script Web App URL");
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setText(current);
+        wrapper.addView(input);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle("スプレッドシート連携")
                 .setView(wrapper)
                 .setPositiveButton("保存", (dialog, which) -> {
-                    ReminderScheduler.saveWebhookUrl(this, input.getText().toString());
+                    String url = input.getText().toString().trim();
+                    if (url.isEmpty()) {
+                        ReminderScheduler.saveWebhookUrl(this, "");
+                        refreshStatus();
+                        Toast.makeText(this, "連携を解除しました", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!url.startsWith("https://script.google.com/")) {
+                        Toast.makeText(this, "Apps Script の Web App URL ではありません", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    ReminderScheduler.saveWebhookUrl(this, url);
                     refreshStatus();
-                    Toast.makeText(this, "連携URLを保存しました", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "連携先を保存しました", Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("キャンセル", null)
-                .show();
+                .setNegativeButton("キャンセル", null);
+        if (configured) {
+            builder.setNeutralButton("テスト送信", (dialog, which) -> SheetsSync.syncUnsynced(this, true));
+        }
+        builder.show();
     }
 
     private void exportCsv() {
@@ -221,6 +256,7 @@ public class SettingsActivity extends android.app.Activity {
             try {
                 int rows = CsvBackupManager.importFromCsvUri(this, uri);
                 ReminderScheduler.scheduleNext(this);
+                AutoSync.run(this);
                 refreshStatus();
                 Toast.makeText(this, "CSVからインポートしました: " + rows + "行", Toast.LENGTH_LONG).show();
             } catch (Exception e) {
