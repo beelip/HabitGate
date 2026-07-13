@@ -203,6 +203,16 @@ public class StatsActivity extends ThemedActivity {
             chartTotals = expandDaily(from, to);
         }
 
+        // アプリ連携の計測中（未保存）分をリアルタイムに反映する
+        int liveExtra = 0;
+        boolean periodIncludesToday = from.compareTo(todayRef) <= 0 && todayRef.compareTo(to) <= 0;
+        if (periodIncludesToday) {
+            liveExtra = AppUsage.liveUnsavedReduceMinutes(this, db, todayRef);
+        }
+        if (liveExtra > 0) {
+            chartTotals = applyLiveExtraToChart(chartTotals, todayRef, liveExtra);
+        }
+
         if (chartLabels == null) {
             chart.setTotals(chartTotals);
         } else {
@@ -224,11 +234,17 @@ public class StatsActivity extends ThemedActivity {
             if (HabitDb.CATEGORY_DO.equals(r.category)) doTotal += r.durationMinutes;
             if (HabitDb.CATEGORY_REDUCE.equals(r.category)) reduceTotal += r.durationMinutes;
         }
+        if (liveExtra > 0) {
+            reduceTotal += liveExtra;
+        }
         summaryRow.addView(summaryCell("やること", doTotal, Ui.GOOD),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         summaryRow.addView(summaryCell("減らすこと", reduceTotal, Ui.DANGER),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         summaryCard.addView(summaryRow);
+        if (liveExtra > 0) {
+            summaryCard.addView(Ui.note(this, "📱 計測中（未保存）の " + DateTools.formatMinutes(liveExtra) + " を含みます。一日の終了時に自動保存されます。"));
+        }
 
         // 完了したタスク
         list.addView(Ui.section(this, "完了したタスク"));
@@ -317,6 +333,33 @@ public class StatsActivity extends ThemedActivity {
         }
 
         SheetsSync.syncUnsynced(this, false);
+    }
+
+    /** チャート集計に、当日分の計測中（未保存）分を加算した新しいリストを返す。 */
+    private List<Models.DayTotal> applyLiveExtraToChart(List<Models.DayTotal> totals, String todayRef, int liveExtra) {
+        List<Models.DayTotal> result = new ArrayList<>();
+        if ("month".equals(mode)) {
+            int dayOfMonth = DateTools.parseOrToday(todayRef).getDayOfMonth();
+            int weekIdx = (dayOfMonth - 1) / 7;
+            int lastIdx = totals.size() - 1;
+            for (int i = 0; i < totals.size(); i++) {
+                Models.DayTotal t = totals.get(i);
+                if (i == weekIdx || i == lastIdx) {
+                    result.add(new Models.DayTotal(t.date, t.doMinutes, t.reduceMinutes + liveExtra));
+                } else {
+                    result.add(t);
+                }
+            }
+        } else {
+            for (Models.DayTotal t : totals) {
+                if (t.date.equals(todayRef)) {
+                    result.add(new Models.DayTotal(t.date, t.doMinutes, t.reduceMinutes + liveExtra));
+                } else {
+                    result.add(t);
+                }
+            }
+        }
+        return result;
     }
 
     private LinearLayout summaryCell(String label, int minutes, int color) {

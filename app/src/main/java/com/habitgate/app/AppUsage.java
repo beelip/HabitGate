@@ -132,7 +132,7 @@ public final class AppUsage {
         int added = 0;
         for (Models.ReduceItem item : db.getActiveReduceItems()) {
             if (!item.hasLinkedApp()) continue;
-            if (db.hasRecordOn(HabitDb.CATEGORY_REDUCE, item.title, isoDate)) continue;
+            if (db.hasAutoRecordOn(HabitDb.CATEGORY_REDUCE, item.title, isoDate)) continue;
             int minutes = foregroundMinutesOn(context, item.appPackage, isoDate);
             if (minutes <= 0) continue;
             db.addRecord(HabitDb.CATEGORY_REDUCE, item.title,
@@ -140,6 +140,22 @@ public final class AppUsage {
             added++;
         }
         return added;
+    }
+
+    /**
+     * アプリ連携済み項目について、指定日の「計測済みだが未保存」の合計分数を返す。
+     * （計測値から、その日に自動計測として保存済みの分を引いた残り）
+     */
+    public static int liveUnsavedReduceMinutes(Context context, HabitDb db, String isoDate) {
+        if (!hasPermission(context)) return 0;
+        int total = 0;
+        for (Models.ReduceItem item : db.getActiveReduceItems()) {
+            if (!item.hasLinkedApp()) continue;
+            int measured = foregroundMinutesOn(context, item.appPackage, isoDate);
+            int autoSaved = db.getReduceAutoMinutesOn(item.title, isoDate);
+            total += Math.max(0, measured - autoSaved);
+        }
+        return total;
     }
 
     public static class AppEntry {

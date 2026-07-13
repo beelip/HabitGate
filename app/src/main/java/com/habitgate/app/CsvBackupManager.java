@@ -64,12 +64,12 @@ public final class CsvBackupManager {
         sb.append("# habit_gate_csv_v1\n");
 
         appendSection(sb, "do_tasks",
-                "id,title,note,planned_date,created_at,active,completed,completed_date",
-                query(db, "SELECT id,title,note,planned_date,created_at,active,completed,completed_date FROM do_tasks ORDER BY id ASC"));
+                "id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at",
+                query(db, "SELECT id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at FROM do_tasks ORDER BY id ASC"));
 
         appendSection(sb, "reduce_items",
-                "id,title,note,app_package,gauge_max_minutes,created_at,active",
-                query(db, "SELECT id,title,note,app_package,gauge_max_minutes,created_at,active FROM reduce_items ORDER BY id ASC"));
+                "id,title,note,app_package,gauge_max_minutes,created_at,active,sort_order",
+                query(db, "SELECT id,title,note,app_package,gauge_max_minutes,created_at,active,sort_order FROM reduce_items ORDER BY id ASC"));
 
         appendSection(sb, "records",
                 "id,category,title,note,duration_minutes,actual_date,created_at,synced",
@@ -152,6 +152,11 @@ public final class CsvBackupManager {
             rows += insertReduceItems(db, tables.get("reduce_items"));
             rows += insertRecords(db, tables.get("records"));
             rows += insertCycles(db, tables.get("cycles"));
+
+            // 旧CSV（sort_order列なし）からのインポート時は 0 のままだと並び順が壊れるため、id で補完する
+            db.execSQL("UPDATE do_tasks SET sort_order = id WHERE sort_order = 0");
+            db.execSQL("UPDATE reduce_items SET sort_order = id WHERE sort_order = 0");
+
             ensureActiveCycle(db);
 
             db.setTransactionSuccessful();
@@ -326,6 +331,9 @@ public final class CsvBackupManager {
             v.put("active", integer(row, "active", 1));
             v.put("completed", integer(row, "completed", 0));
             v.put("completed_date", str(row, "completed_date"));
+            v.put("sort_order", integer(row, "sort_order", 0));
+            v.put("priority", integer(row, "priority", 0));
+            v.put("due_at", lng(row, "due_at", 0));
             db.insert("do_tasks", null, v);
             count++;
         }
@@ -344,6 +352,7 @@ public final class CsvBackupManager {
             v.put("gauge_max_minutes", integer(row, "gauge_max_minutes", 480));
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("active", integer(row, "active", 1));
+            v.put("sort_order", integer(row, "sort_order", 0));
             db.insert("reduce_items", null, v);
             count++;
         }

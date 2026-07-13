@@ -90,31 +90,30 @@ public class ReduceEntryActivity extends ThemedActivity {
         dateRow.addView(changeDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         inputCard.addView(dateRow);
 
-        LinearLayout duration = durationRow();
-        hoursEdit = (EditText) duration.getChildAt(1);
-        minutesEdit = (EditText) duration.getChildAt(3);
-        inputCard.addView(duration);
-
         if (item.hasLinkedApp()) {
+            TextView measuredText = new TextView(this);
+            measuredText.setTextSize(15);
             if (AppUsage.hasPermission(this)) {
                 int measured = AppUsage.foregroundMinutesOn(this, item.appPackage, entryDate);
-                hoursEdit.setText(String.valueOf(measured / 60));
-                minutesEdit.setText(String.valueOf(measured % 60));
-                hoursEdit.setEnabled(false);
-                minutesEdit.setEnabled(false);
-                hoursEdit.setTextColor(Ui.HINT);
-                minutesEdit.setTextColor(Ui.HINT);
-                inputCard.addView(Ui.note(this, "アプリ連携中は使用時間を自動計測します"));
+                measuredText.setText("📱 計測: " + DateTools.formatMinutes(measured) + "（自動保存されます）");
+                measuredText.setTextColor(Ui.PRIMARY);
             } else {
-                hoursEdit.setText("0");
-                minutesEdit.setText("0");
-                hoursEdit.setEnabled(false);
-                minutesEdit.setEnabled(false);
-                hoursEdit.setTextColor(Ui.HINT);
-                minutesEdit.setTextColor(Ui.HINT);
-                inputCard.addView(Ui.note(this, "使用状況へのアクセスが未許可のため計測できません"));
+                measuredText.setText("📱 計測: 権限がないため計測できません");
+                measuredText.setTextColor(Ui.DANGER);
             }
+            inputCard.addView(measuredText);
+
+            LinearLayout duration = durationRow("手動追加: ");
+            hoursEdit = (EditText) duration.getChildAt(1);
+            minutesEdit = (EditText) duration.getChildAt(3);
+            inputCard.addView(duration);
+            if (!hoursText.isEmpty()) hoursEdit.setText(hoursText);
+            if (!minutesText.isEmpty()) minutesEdit.setText(minutesText);
         } else {
+            LinearLayout duration = durationRow("時間: ");
+            hoursEdit = (EditText) duration.getChildAt(1);
+            minutesEdit = (EditText) duration.getChildAt(3);
+            inputCard.addView(duration);
             if (!hoursText.isEmpty()) hoursEdit.setText(hoursText);
             if (!minutesText.isEmpty()) minutesEdit.setText(minutesText);
         }
@@ -164,11 +163,11 @@ public class ReduceEntryActivity extends ThemedActivity {
         root.addView(save);
     }
 
-    private LinearLayout durationRow() {
+    private LinearLayout durationRow(String labelText) {
         LinearLayout row = Ui.horizontal(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView label = new TextView(this);
-        label.setText("時間: ");
+        label.setText(labelText);
         row.addView(label);
         EditText h = Ui.numberEdit(this, "0", 99);
         row.addView(h);
@@ -212,10 +211,8 @@ public class ReduceEntryActivity extends ThemedActivity {
     }
 
     private void stashInputs() {
-        if (!item.hasLinkedApp()) {
-            hoursText = hoursEdit.getText().toString();
-            minutesText = minutesEdit.getText().toString();
-        }
+        hoursText = hoursEdit.getText().toString();
+        minutesText = minutesEdit.getText().toString();
         gaugeHoursText = gaugeHoursEdit.getText().toString();
         gaugeMinutesText = gaugeMinutesEdit.getText().toString();
         gaugeTouched = true;
@@ -247,16 +244,20 @@ public class ReduceEntryActivity extends ThemedActivity {
             db.setReduceItemGaugeMax(item.id, gaugeMinutes);
         }
 
-        // 連携済みなら計測値、そうでなければ入力値（どちらも hoursEdit/minutesEdit に反映済み）
-        int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-
-        if (minutes == 0 && memo.isEmpty()) {
-            AutoSync.run(this);
-            Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
+        if (item.hasLinkedApp()) {
+            // 計測値は自動計測（一日の終了時）で保存されるため、ここでは手動追加分のみを保存する。
+            int manualMinutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
+            if (manualMinutes > 0 || !memo.isEmpty()) {
+                db.addRecord(HabitDb.CATEGORY_REDUCE, item.title,
+                        mergeNotes(item.note, memo.isEmpty() ? "手動追加" : memo), manualMinutes, entryDate);
+            }
+        } else {
+            int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
+            if (minutes > 0 || !memo.isEmpty()) {
+                db.addRecord(HabitDb.CATEGORY_REDUCE, item.title, mergeNotes(item.note, memo), minutes, entryDate);
+            }
         }
-        db.addRecord(HabitDb.CATEGORY_REDUCE, item.title, mergeNotes(item.note, memo), minutes, entryDate);
+
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();

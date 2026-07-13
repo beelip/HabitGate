@@ -8,12 +8,18 @@ public final class Models {
         public final String title;
         public final String plannedDate;
         public final String note;
+        // 優先度: 0=なし,1=低,2=中,3=高
+        public final int priority;
+        // 期限（epoch ミリ秒）。0=期限なし
+        public final long dueAt;
 
-        public Task(long id, String title, String plannedDate, String note) {
+        public Task(long id, String title, String plannedDate, String note, int priority, long dueAt) {
             this.id = id;
             this.title = title;
             this.plannedDate = plannedDate;
             this.note = note == null ? "" : note;
+            this.priority = priority;
+            this.dueAt = dueAt;
         }
     }
 
