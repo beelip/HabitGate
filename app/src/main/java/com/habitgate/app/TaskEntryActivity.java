@@ -35,6 +35,7 @@ public class TaskEntryActivity extends ThemedActivity {
     private TextView plannedText;
     private Button priorityButton;
     private Button dueButton;
+    private TextView taskNoteText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,9 +77,19 @@ public class TaskEntryActivity extends ThemedActivity {
         plannedRow.addView(plannedDateButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         infoCard.addView(plannedRow);
 
-        if (!task.note.isEmpty()) {
-            infoCard.addView(Ui.note(this, "メモ: " + task.note));
-        }
+        LinearLayout taskNoteRow = Ui.horizontal(this);
+        taskNoteText = new TextView(this);
+        taskNoteText.setTextSize(13);
+        taskNoteText.setMaxLines(3);
+        taskNoteText.setEllipsize(TextUtils.TruncateAt.END);
+        updateTaskNoteText();
+        taskNoteText.setOnClickListener(v -> openTaskNoteDialog());
+        taskNoteRow.addView(taskNoteText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button taskNoteButton = Ui.iconButton(this, "📝");
+        taskNoteButton.setContentDescription("タスクのメモを編集");
+        taskNoteButton.setOnClickListener(v -> openTaskNoteDialog());
+        taskNoteRow.addView(taskNoteButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        infoCard.addView(taskNoteRow);
 
         LinearLayout taskOptionsRow = Ui.horizontal(this);
         priorityButton = Ui.button(this, "優先度: " + DateTools.priorityLabel(task.priority));
@@ -174,6 +185,38 @@ public class TaskEntryActivity extends ThemedActivity {
         suffix.setText(" 分");
         row.addView(suffix);
         return row;
+    }
+
+    private void updateTaskNoteText() {
+        if (task.note.isEmpty()) {
+            taskNoteText.setText("メモ（任意）");
+            taskNoteText.setTextColor(Ui.HINT);
+        } else {
+            taskNoteText.setText("メモ: " + task.note);
+            taskNoteText.setTextColor(Ui.MUTED);
+        }
+    }
+
+    private void openTaskNoteDialog() {
+        EditText input = Ui.multilineEdit(this, "メモ（任意）");
+        input.setText(task.note);
+        int pad = Ui.dp(this, 18);
+        LinearLayout wrapper = Ui.vertical(this);
+        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
+        wrapper.addView(input);
+        Ui.dialog(this)
+                .setTitle("タスクのメモ")
+                .setView(wrapper)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    String newNote = input.getText().toString().trim();
+                    db.updateDoTask(task.id, task.title, newNote, task.plannedDate, task.priority, task.dueAt);
+                    AutoSync.run(this);
+                    task = db.getDoTask(task.id);
+                    updateTaskNoteText();
+                    Toast.makeText(this, "メモを保存しました", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
     }
 
     private void updateMemoPreview() {
