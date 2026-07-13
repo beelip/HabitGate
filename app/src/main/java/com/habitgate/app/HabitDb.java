@@ -193,11 +193,17 @@ public class HabitDb extends SQLiteOpenHelper {
     }
 
     public long addDoTask(String title, String note, String plannedDate) {
+        return addDoTask(title, note, plannedDate, 0, 0);
+    }
+
+    public long addDoTask(String title, String note, String plannedDate, int priority, long dueAt) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues v = new ContentValues();
         v.put("title", title.trim());
         v.put("note", clean(note));
         v.put("planned_date", plannedDate);
+        v.put("priority", priority);
+        v.put("due_at", dueAt);
         v.put("created_at", System.currentTimeMillis());
         v.put("active", 1);
         long id = db.insert("do_tasks", null, v);
