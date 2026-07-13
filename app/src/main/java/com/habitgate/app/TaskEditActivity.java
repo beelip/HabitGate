@@ -2,6 +2,7 @@ package com.habitgate.app;
 
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
@@ -10,7 +11,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /** やること／減らすことの追加・一覧・削除・アプリ連携を行う編集画面。 */
@@ -22,6 +26,10 @@ public class TaskEditActivity extends ThemedActivity {
     private EditText addDoNote;
     private EditText addReduceTitle;
     private EditText addReduceNote;
+    private int addPriority = 0;
+    private long addDueAt = 0;
+    private Button addPriorityButton;
+    private Button addDueButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,8 +52,26 @@ public class TaskEditActivity extends ThemedActivity {
         root.addView(Ui.section(this, "やることを追加"));
         LinearLayout doAddCard = Ui.card(this, root);
         addDoTitle = Ui.edit(this, "例: 30分走る / PM過去問1問");
-        addDoNote = Ui.edit(this, "メモ（任意）");
         doAddCard.addView(addDoTitle);
+
+        LinearLayout addDoOptionsRow = Ui.horizontal(this);
+        addPriorityButton = Ui.button(this, "優先度: " + DateTools.priorityLabel(addPriority));
+        addPriorityButton.setOnClickListener(v -> openAddPriorityDialog());
+        LinearLayout.LayoutParams addPriorityLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        addPriorityLp.rightMargin = Ui.dp(this, 8);
+        addDoOptionsRow.addView(addPriorityButton, addPriorityLp);
+        addDueButton = Ui.button(this, "期限: " + DateTools.formatDueShort(addDueAt));
+        addDueButton.setOnClickListener(v -> openAddDueDatePicker());
+        addDueButton.setOnLongClickListener(v -> {
+            addDueAt = 0;
+            addDueButton.setText("期限: なし");
+            Toast.makeText(this, "期限をクリアしました", Toast.LENGTH_SHORT).show();
+            return true;
+        });
+        addDoOptionsRow.addView(addDueButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        doAddCard.addView(addDoOptionsRow);
+
+        addDoNote = Ui.edit(this, "メモ（任意）");
         doAddCard.addView(addDoNote);
         LinearLayout addDoButtons = Ui.horizontal(this);
         Button addDoToday = Ui.tonalButton(this, "今日やる");
@@ -63,7 +89,7 @@ public class TaskEditActivity extends ThemedActivity {
         addDoButtons.addView(addDoNext, grow2);
         addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         doAddCard.addView(addDoButtons);
-        doAddCard.addView(Ui.note(this, "項目をタップすると実績入力、長押しすると編集を開きます。"));
+        doAddCard.addView(Ui.note(this, "項目をタップすると実績入力、長押しすると編集を開きます。期限ボタンの長押しでクリアできます。"));
 
         // やること一覧
         root.addView(Ui.section(this, "やること"));
@@ -106,15 +132,47 @@ public class TaskEditActivity extends ThemedActivity {
         }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
     }
 
+    private void openAddPriorityDialog() {
+        Ui.dialog(this)
+                .setTitle("優先度")
+                .setItems(new String[]{"なし", "低", "中", "高"}, (d, which) -> {
+                    addPriority = which;
+                    addPriorityButton.setText("優先度: " + DateTools.priorityLabel(addPriority));
+                })
+                .show();
+    }
+
+    private void openAddDueDatePicker() {
+        Models.Cycle cycle = db.getCurrentCycle();
+        LocalDateTime initial = addDueAt > 0
+                ? Instant.ofEpochMilli(addDueAt).atZone(ZoneId.systemDefault()).toLocalDateTime()
+                : DateTools.parseOrToday(cycle.cycleDate).atTime(23, 59);
+        new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
+            LocalDate date = LocalDate.of(year, month + 1, dayOfMonth);
+            openAddDueTimePicker(date, initial.getHour(), initial.getMinute());
+        }, initial.getYear(), initial.getMonthValue() - 1, initial.getDayOfMonth()).show();
+    }
+
+    private void openAddDueTimePicker(LocalDate date, int initialHour, int initialMinute) {
+        new TimePickerDialog(this, Ui.pickerTheme(), (view, hourOfDay, minute) -> {
+            addDueAt = date.atTime(hourOfDay, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            addDueButton.setText("期限: " + DateTools.formatDueShort(addDueAt));
+        }, initialHour, initialMinute, true).show();
+    }
+
     private void addDoTaskForDate(String plannedDate) {
         String title = addDoTitle.getText().toString().trim();
         if (title.isEmpty()) {
             Toast.makeText(this, "タスク名を入力してください", Toast.LENGTH_SHORT).show();
             return;
         }
-        db.addDoTask(title, addDoNote.getText().toString(), plannedDate);
+        db.addDoTask(title, addDoNote.getText().toString(), plannedDate, addPriority, addDueAt);
         addDoTitle.setText("");
         addDoNote.setText("");
+        addPriority = 0;
+        addDueAt = 0;
+        addPriorityButton.setText("優先度: " + DateTools.priorityLabel(addPriority));
+        addDueButton.setText("期限: " + DateTools.formatDueShort(addDueAt));
         AutoSync.run(this);
         refreshLists();
         Toast.makeText(this, DateTools.formatShortDateWithWeekday(plannedDate) + " に追加しました", Toast.LENGTH_SHORT).show();

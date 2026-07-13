@@ -155,4 +155,18 @@ public final class DateTools {
     public static long dayEndMillis(String isoDate) {
         return parseOrToday(isoDate).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
+
+    private static final String[] PRIORITY_LABELS = {"なし", "低", "中", "高"};
+
+    public static String priorityLabel(int priority) {
+        if (priority >= 0 && priority < PRIORITY_LABELS.length) return PRIORITY_LABELS[priority];
+        return PRIORITY_LABELS[0];
+    }
+
+    /** 期限ボタン用の短い表示。0 以下なら「なし」、それ以外は「MM/dd HH:mm」。 */
+    public static String formatDueShort(long epochMillis) {
+        if (epochMillis <= 0) return "なし";
+        String full = formatDateTime(epochMillis); // yyyy-MM-dd HH:mm
+        return full.length() >= 16 ? full.substring(5).replace('-', '/') : full;
+    }
 }
