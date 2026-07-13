@@ -253,6 +253,8 @@ public class HabitDb extends SQLiteOpenHelper {
             orderBy = "priority DESC, sort_order ASC, id ASC";
         } else if ("due".equals(sortMode)) {
             orderBy = "CASE WHEN due_at=0 THEN 1 ELSE 0 END ASC, due_at ASC, sort_order ASC, id ASC";
+        } else if ("planned".equals(sortMode)) {
+            orderBy = "planned_date ASC, sort_order ASC, id ASC";
         } else if ("created".equals(sortMode)) {
             orderBy = "created_at ASC, id ASC";
         } else {

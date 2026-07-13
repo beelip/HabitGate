@@ -105,8 +105,8 @@ public class MainActivity extends ThemedActivity {
     private void openSortDialog() {
         Ui.dialog(this)
                 .setTitle("並び順")
-                .setItems(new String[]{"優先順位（手動並べ替え）", "優先度", "期限", "作成日"}, (dialog, which) -> {
-                    String[] values = {"manual", "priority", "due", "created"};
+                .setItems(new String[]{"優先順位（手動並べ替え）", "優先度", "期限", "予定日", "作成日"}, (dialog, which) -> {
+                    String[] values = {"manual", "priority", "due", "planned", "created"};
                     ReminderScheduler.prefs(this).edit().putString("do_sort_mode", values[which]).apply();
                     refreshLists();
                 })
@@ -116,6 +116,7 @@ public class MainActivity extends ThemedActivity {
     private String sortChipLabel(String mode) {
         if ("priority".equals(mode)) return "⇅ 優先度";
         if ("due".equals(mode)) return "⇅ 期限";
+        if ("planned".equals(mode)) return "⇅ 予定日";
         if ("created".equals(mode)) return "⇅ 作成日";
         return "⇅ 優先順位";
     }
