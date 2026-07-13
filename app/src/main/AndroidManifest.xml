@@ -43,6 +43,14 @@
             android:exported="false" />
 
         <activity
+            android:name=".TaskFormActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ReduceFormActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".TaskEntryActivity"
             android:exported="false" />
 

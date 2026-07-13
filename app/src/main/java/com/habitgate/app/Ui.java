@@ -82,6 +82,22 @@ public final class Ui {
         }
         decor.setSystemUiVisibility(flags);
 
+        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+            int top;
+            int bottom;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                top = bars.top;
+                bottom = bars.bottom;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            v.setPadding(0, top, 0, bottom);
+            return insets;
+        });
+        scroll.requestApplyInsets();
+
         return root;
     }
 
@@ -292,6 +308,26 @@ public final class Ui {
         v.setBackground(new RippleDrawable(
                 ColorStateList.valueOf(DARK ? 0x24FFFFFF : 0x14000000), null,
                 new ColorDrawable(0xFFFFFFFF)));
+    }
+
+    /** 優先度に応じた行の背景色。0 なら 0（色なし）。ダークテーマでは暗色トーン。 */
+    public static int priorityTint(int priority) {
+        if (priority == 3) return DARK ? 0xFF42201E : 0xFFFEE2E2; // 高=淡い赤
+        if (priority == 2) return DARK ? 0xFF3E3712 : 0xFFFEF9C3; // 中=淡い黄
+        if (priority == 1) return DARK ? 0xFF1B3524 : 0xFFDCFCE7; // 低=淡い緑
+        return 0;
+    }
+
+    /** タップ可能な行。fillColor が 0 以外なら角丸の塗り背景 + リップル。0 なら従来の透明リップル。 */
+    public static void tappableRow(View v, int fillColor) {
+        v.setClickable(true);
+        if (fillColor == 0) {
+            tappable(v);
+            return;
+        }
+        v.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(DARK ? 0x24FFFFFF : 0x14000000),
+                rounded(fillColor, 0, dp(v.getContext(), 10)), null));
     }
 
     private static void style(EditText et) {

@@ -142,6 +142,12 @@ public final class DateTools {
         return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(DATE_TIME);
     }
 
+    /** epoch ミリ秒から ISO 日付文字列（yyyy-MM-dd）を返す。0 以下は空文字。 */
+    public static String dateOfMillis(long epochMillis) {
+        if (epochMillis <= 0) return "";
+        return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate().format(DATE);
+    }
+
     public static long dayStartMillis(String isoDate) {
         return parseOrToday(isoDate).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }

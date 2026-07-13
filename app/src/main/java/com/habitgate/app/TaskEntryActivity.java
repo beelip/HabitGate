@@ -98,9 +98,14 @@ public class TaskEntryActivity extends ThemedActivity {
         memoRow.addView(memoButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         inputCard.addView(memoRow);
 
+        LinearLayout completeRow = Ui.horizontal(this);
         completeCheck = new CheckBox(this);
         completeCheck.setText("完了する");
-        inputCard.addView(completeCheck);
+        completeRow.addView(completeCheck, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button carryOver = Ui.tonalButton(this, "明日に繰り越す");
+        carryOver.setOnClickListener(v -> confirmCarryOver());
+        completeRow.addView(carryOver, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        inputCard.addView(completeRow);
 
         Ui.space(this, root, 6);
         Button save = Ui.primaryButton(this, "保存");
@@ -192,6 +197,21 @@ public class TaskEntryActivity extends ThemedActivity {
                     db.completeDoTask(task.id, entryDate);
                     AutoSync.run(this);
                     Toast.makeText(this, "完了しました", Toast.LENGTH_SHORT).show();
+                    finish();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
+    }
+
+    private void confirmCarryOver() {
+        String nextDate = DateTools.nextDay(DateTools.maxDate(task.plannedDate, db.getCurrentCycle().cycleDate));
+        Ui.dialog(this)
+                .setTitle("翌日に繰り越しますか？")
+                .setMessage("「" + task.title + "」を " + DateTools.formatShortDateWithWeekday(nextDate) + " に移動します。")
+                .setPositiveButton("繰り越す", (d, w) -> {
+                    db.carryOverDoTask(task.id, nextDate);
+                    AutoSync.run(this);
+                    Toast.makeText(this, "繰り越しました", Toast.LENGTH_SHORT).show();
                     finish();
                 })
                 .setNegativeButton("キャンセル", null)

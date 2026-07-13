@@ -2,10 +2,12 @@ package com.habitgate.app;
 
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.time.LocalDate;
@@ -61,6 +63,7 @@ public class TaskEditActivity extends ThemedActivity {
         addDoButtons.addView(addDoNext, grow2);
         addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         doAddCard.addView(addDoButtons);
+        doAddCard.addView(Ui.note(this, "項目をタップすると実績入力、長押しすると編集を開きます。"));
 
         // やること一覧
         root.addView(Ui.section(this, "やること"));
@@ -78,7 +81,7 @@ public class TaskEditActivity extends ThemedActivity {
         Button addReduceButton = Ui.tonalButton(this, "追加");
         addReduceButton.setOnClickListener(v -> addReduceItem());
         reduceAddCard.addView(addReduceButton);
-        reduceAddCard.addView(Ui.note(this, "📱 でアプリを連携すると、そのアプリの使用時間を自動計測します。"));
+        reduceAddCard.addView(Ui.note(this, "📱 でアプリを連携すると、そのアプリの使用時間を自動計測します。項目をタップすると実績入力、長押しすると編集を開きます。"));
 
         // 減らすこと一覧
         root.addView(Ui.section(this, "減らすこと"));
@@ -142,9 +145,25 @@ public class TaskEditActivity extends ThemedActivity {
             for (Models.Task t : tasks) {
                 Ui.addDivider(this, doList);
                 LinearLayout row = Ui.horizontal(this);
-                String text = DateTools.formatShortDateWithWeekday(t.plannedDate) + "  " + t.title;
-                if (!t.note.isEmpty()) text += "\nメモ: " + t.note;
-                row.addView(Ui.body(this, text), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+                LinearLayout col = Ui.vertical(this);
+                col.addView(Ui.body(this, DateTools.formatShortDateWithWeekday(t.plannedDate) + "  " + t.title));
+                if (t.dueAt > 0) {
+                    TextView dueLine = new TextView(this);
+                    dueLine.setText("⏰ 期限: " + DateTools.formatDateTime(t.dueAt));
+                    dueLine.setTextSize(13);
+                    dueLine.setTextColor(t.dueAt < System.currentTimeMillis() ? Ui.DANGER : Ui.HINT);
+                    col.addView(dueLine);
+                }
+                if (!t.note.isEmpty()) {
+                    TextView noteLine = new TextView(this);
+                    noteLine.setText("メモ: " + t.note);
+                    noteLine.setTextSize(13);
+                    noteLine.setTextColor(Ui.HINT);
+                    col.addView(noteLine);
+                }
+                row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
                 Button del = Ui.iconButton(this, "🗑");
                 del.setContentDescription("削除");
                 del.setOnClickListener(v -> confirmDelete("やること", t.title, () -> {
@@ -153,6 +172,23 @@ public class TaskEditActivity extends ThemedActivity {
                     refreshLists();
                 }));
                 row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                int tint = Ui.priorityTint(t.priority);
+                Ui.tappableRow(row, tint);
+                if (tint != 0) {
+                    row.setPadding(Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
+                }
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    intent.putExtra("task_id", t.id);
+                    startActivity(intent);
+                });
+                row.setOnLongClickListener(v -> {
+                    Intent intent = new Intent(this, TaskFormActivity.class);
+                    intent.putExtra("task_id", t.id);
+                    startActivity(intent);
+                    return true;
+                });
                 doList.addView(row);
             }
         }
@@ -185,6 +221,19 @@ public class TaskEditActivity extends ThemedActivity {
                     refreshLists();
                 }));
                 row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                Ui.tappable(row);
+                row.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, ReduceEntryActivity.class);
+                    intent.putExtra("item_id", item.id);
+                    startActivity(intent);
+                });
+                row.setOnLongClickListener(v -> {
+                    Intent intent = new Intent(this, ReduceFormActivity.class);
+                    intent.putExtra("item_id", item.id);
+                    startActivity(intent);
+                    return true;
+                });
                 reduceList.addView(row);
             }
         }
