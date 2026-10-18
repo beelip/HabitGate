@@ -7,14 +7,15 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,11 +97,31 @@ public class StatsActivity extends ThemedActivity {
     }
 
     private void buildUi() {
-        LinearLayout root = Ui.screen(this);
+        FrameLayout rootFrame = new FrameLayout(this);
+        rootFrame.setBackgroundColor(Ui.BG);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout content = Ui.vertical(this);
+        int pad = Ui.dp(this, 16);
+        content.setPadding(pad, Ui.dp(this, 12), pad, Ui.dp(this, 40));
+        scroll.addView(content);
+        rootFrame.addView(scroll, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // フロートバー（チップ行の入れ物）
+        LinearLayout bar = Ui.horizontal(this);
+        bar.setBackgroundColor(Ui.BG);
+        bar.setPadding(pad, 0, pad, Ui.dp(this, 6));
+        rootFrame.addView(bar, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        setContentView(rootFrame);
+        Ui.applyWindowChrome(this);
+        Ui.applyInsets(rootFrame);
 
-        root.addView(Ui.titleWithBack(this, "集計"));
+        LinearLayout titleRow = Ui.titleWithBack(this, "集計");
+        content.addView(titleRow);
+        View barSpacer = new View(this);
+        content.addView(barSpacer, new LinearLayout.LayoutParams(1, Ui.dp(this, 48)));
 
-        LinearLayout chips = Ui.horizontal(this);
         dayChip = Ui.chip(this, "今日");
         weekChip = Ui.chip(this, "今週");
         monthChip = Ui.chip(this, "今月");
@@ -110,14 +131,22 @@ public class StatsActivity extends ThemedActivity {
         weekChip.setOnClickListener(v -> { mode = "week"; refresh(); });
         monthChip.setOnClickListener(v -> { mode = "month"; refresh(); });
         dateChip.setOnClickListener(v -> openDatePicker());
-        addChip(chips, dayChip, true);
-        addChip(chips, weekChip, true);
-        addChip(chips, monthChip, true);
-        chips.addView(dateChip, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(chips);
-        Ui.space(this, root, 10);
+        addChip(bar, dayChip, true);
+        addChip(bar, weekChip, true);
+        addChip(bar, monthChip, true);
+        bar.addView(dateChip, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        LinearLayout chartCard = Ui.card(this, root);
+        // チップバーはタイトルがスクロールで隠れるまで追従し、その後は上端に固定する
+        Runnable positionBar = () -> bar.setTranslationY(Math.max(0, titleRow.getBottom() - scroll.getScrollY()));
+        scroll.setOnScrollChangeListener((v, x, y, ox, oy) -> positionBar.run());
+        bar.post(() -> {
+            // スペーサ高さを実測に合わせ、初期位置を設定
+            barSpacer.getLayoutParams().height = Math.max(bar.getHeight(), Ui.dp(this, 48));
+            barSpacer.requestLayout();
+            positionBar.run();
+        });
+
+        LinearLayout chartCard = Ui.card(this, content);
         chart = new BarChartView(this);
         // グラフ上の左右スワイプで前後の期間へ移動する。端の ‹ › は操作できることを示す目印。
         FrameLayout chartFrame = new FrameLayout(this);
@@ -141,7 +170,7 @@ public class StatsActivity extends ThemedActivity {
         chartCard.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。"));
 
         list = Ui.vertical(this);
-        root.addView(list);
+        content.addView(list);
     }
 
     private TextView swipeMark(String text) {
@@ -266,23 +295,16 @@ public class StatsActivity extends ThemedActivity {
         List<Models.CompletedTask> completedTasks = new ArrayList<>(db.getCompletedTaskTotals(from, to));
         list.removeAllViews();
 
-        // 時間ソート（日付グループは記録側で維持する）
-        Collections.sort(completedTasks, (a, b) -> completedDesc
-                ? Integer.compare(b.minutes, a.minutes)
-                : Integer.compare(a.minutes, b.minutes));
-        records.sort((a, b) -> {
-            int d = b.actualDate.compareTo(a.actualDate);
-            if (d != 0) return d;
-            return recordsDesc
-                    ? Integer.compare(b.durationMinutes, a.durationMinutes)
-                    : Integer.compare(a.durationMinutes, b.durationMinutes);
-        });
-        final long nowMillis = System.currentTimeMillis();
-        Collections.sort(cycles, (a, b) -> {
-            long da = (a.closed ? a.endAt : nowMillis) - a.startAt;
-            long db2 = (b.closed ? b.endAt : nowMillis) - b.startAt;
-            return cyclesDesc ? Long.compare(db2, da) : Long.compare(da, db2);
-        });
+        // 日付ブロックの昇降順ソート（同日内は元の順序を保持。List.sort は安定ソート）
+        completedTasks.sort((a, b) -> completedDesc
+                ? b.completedDate.compareTo(a.completedDate)
+                : a.completedDate.compareTo(b.completedDate));
+        records.sort((a, b) -> recordsDesc
+                ? b.actualDate.compareTo(a.actualDate)
+                : a.actualDate.compareTo(b.actualDate));
+        cycles.sort((a, b) -> cyclesDesc
+                ? b.cycleDate.compareTo(a.cycleDate)
+                : a.cycleDate.compareTo(b.cycleDate));
 
         // 合計サマリー
         list.addView(Ui.section(this, label + "の合計"));

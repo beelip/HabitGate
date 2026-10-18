@@ -70,6 +70,14 @@ public final class Ui {
         scroll.addView(root);
         activity.setContentView(scroll);
 
+        applyWindowChrome(activity);
+        applyInsets(scroll);
+
+        return root;
+    }
+
+    /** ステータスバー等のウィンドウ装飾をテーマに合わせる。 */
+    public static void applyWindowChrome(Activity activity) {
         activity.getWindow().setBackgroundDrawable(new ColorDrawable(BG));
         activity.getWindow().setStatusBarColor(BG);
         activity.getWindow().setNavigationBarColor(BG);
@@ -81,8 +89,11 @@ public final class Ui {
             flags &= ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         }
         decor.setSystemUiVisibility(flags);
+    }
 
-        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+    /** システムバーのインセットを v の上下 padding に反映する。 */
+    public static void applyInsets(View v) {
+        v.setOnApplyWindowInsetsListener((view, insets) -> {
             int top;
             int bottom;
             if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -93,12 +104,10 @@ public final class Ui {
                 top = insets.getSystemWindowInsetTop();
                 bottom = insets.getSystemWindowInsetBottom();
             }
-            v.setPadding(0, top, 0, bottom);
+            view.setPadding(0, top, 0, bottom);
             return insets;
         });
-        scroll.requestApplyInsets();
-
-        return root;
+        v.requestApplyInsets();
     }
 
     public static TextView title(Context context, String text) {

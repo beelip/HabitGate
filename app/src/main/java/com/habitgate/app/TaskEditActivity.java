@@ -4,7 +4,6 @@ import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -105,7 +104,7 @@ public class TaskEditActivity extends ThemedActivity {
         addDoButtons.addView(addDoNext, grow2);
         addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         doAddCard.addView(addDoButtons);
-        doAddCard.addView(Ui.note(this, "項目をタップすると実績入力、長押しすると編集を開きます。期限ボタンの長押しでクリアできます。"));
+        doAddCard.addView(Ui.note(this, "項目をタップすると編集、✏ で実績入力、長押しドラッグで並べ替えできます（並べ替えは「優先順位（手動）」ソート時）。期限ボタンの長押しでクリアできます。"));
 
         // やること一覧
         LinearLayout doHeaderRow = Ui.horizontal(this);
@@ -274,29 +273,14 @@ public class TaskEditActivity extends ThemedActivity {
                 }
                 row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-                if ("manual".equals(sortMode)) {
-                    Button handle = Ui.iconButton(this, "≡");
-                    handle.setContentDescription("ドラッグで並べ替え");
-                    handle.setOnTouchListener((v, event) -> {
-                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                            row.startDragAndDrop(null, new View.DragShadowBuilder(row), "do:" + t.id, 0);
-                            return true;
-                        }
-                        return false;
-                    });
-                    LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT);
-                    handleLp.rightMargin = Ui.dp(this, 6);
-                    row.addView(handle, handleLp);
-                }
-
-                Button del = Ui.iconButton(this, "🗑");
-                del.setContentDescription("削除");
-                del.setOnClickListener(v -> confirmDelete("やること", t.title, () -> {
-                    db.deleteDoTask(t.id);
-                    AutoSync.run(this);
-                    refreshLists();
-                }));
-                row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+                Button pencil = Ui.iconButton(this, "✏");
+                pencil.setContentDescription("実績入力");
+                pencil.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    intent.putExtra("task_id", t.id);
+                    startActivity(intent);
+                });
+                row.addView(pencil, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
 
                 int tint = Ui.priorityTint(t.priority);
                 Ui.tappableRow(row, tint);
@@ -304,14 +288,16 @@ public class TaskEditActivity extends ThemedActivity {
                     row.setPadding(Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
                 }
                 row.setOnClickListener(v -> {
-                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    Intent intent = new Intent(this, TaskFormActivity.class);
                     intent.putExtra("task_id", t.id);
                     startActivity(intent);
                 });
                 row.setOnLongClickListener(v -> {
-                    Intent intent = new Intent(this, TaskFormActivity.class);
-                    intent.putExtra("task_id", t.id);
-                    startActivity(intent);
+                    if (!"manual".equals(sortMode)) {
+                        Toast.makeText(this, "並べ替えは「優先順位（手動）」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
+                    v.startDragAndDrop(null, new View.DragShadowBuilder(v), "do:" + t.id, 0);
                     return true;
                 });
                 Reorder.wireRow(row, "do", t.id, this, doOrder, db::saveDoTaskOrder, this::refreshLists);

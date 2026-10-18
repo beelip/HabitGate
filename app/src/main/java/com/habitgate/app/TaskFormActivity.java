@@ -140,6 +140,12 @@ public class TaskFormActivity extends ThemedActivity {
         Button save = Ui.primaryButton(this, "保存");
         save.setOnClickListener(v -> onSave());
         root.addView(save);
+
+        Ui.space(this, root, 16);
+        Button delete = Ui.button(this, "🗑 このタスクを削除");
+        delete.setTextColor(Ui.DANGER);
+        delete.setOnClickListener(v -> confirmDelete());
+        root.addView(delete);
     }
 
     private void updatePlannedDateText() {
@@ -201,5 +207,19 @@ public class TaskFormActivity extends ThemedActivity {
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();
+    }
+
+    private void confirmDelete() {
+        Ui.dialog(this)
+                .setTitle("やることを削除しますか？")
+                .setMessage("「" + task.title + "」を削除します。")
+                .setPositiveButton("削除", (dialog, which) -> {
+                    db.deleteDoTask(task.id);
+                    AutoSync.run(this);
+                    Toast.makeText(this, "削除しました", Toast.LENGTH_SHORT).show();
+                    finish();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
     }
 }

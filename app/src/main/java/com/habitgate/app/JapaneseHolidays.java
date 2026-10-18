@@ -12,7 +12,39 @@ import java.util.Set;
 public final class JapaneseHolidays {
     private static final Map<Integer, Set<LocalDate>> CACHE = new HashMap<>();
 
+    private static volatile Set<String> dbDates;      // 同期済みの祝日 ISO 日付
+    private static volatile Set<Integer> dbYears;     // dbDates に含まれる年の集合
+
     private JapaneseHolidays() {}
+
+    /** 祝日同期後などにキャッシュを破棄する。 */
+    public static void invalidateCache() {
+        dbDates = null;
+        dbYears = null;
+    }
+
+    /** DB に同期データがある年は DB を正とし、無い年はアルゴリズムで判定する。 */
+    public static boolean isHoliday(HabitDb db, LocalDate date) {
+        Set<String> dates = dbDates;
+        Set<Integer> years = dbYears;
+        if (dates == null || years == null) {
+            dates = db.getHolidayDates();
+            Set<Integer> ys = new HashSet<>();
+            for (String d : dates) {
+                if (d.length() >= 4) {
+                    try {
+                        ys.add(Integer.parseInt(d.substring(0, 4)));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            years = ys;
+            dbDates = dates;
+            dbYears = ys;
+        }
+        if (years.contains(date.getYear())) return dates.contains(date.format(DateTools.DATE));
+        return isHoliday(date);
+    }
 
     public static boolean isHoliday(LocalDate date) {
         return holidaysOf(date.getYear()).contains(date);

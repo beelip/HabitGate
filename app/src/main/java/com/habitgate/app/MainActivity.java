@@ -263,7 +263,7 @@ public class MainActivity extends ThemedActivity {
         LinearLayout row = ListRows.taskRow(this, db, t, cycle, this::refreshLists);
         row.setOnLongClickListener(v -> {
             if (!"manual".equals(sortMode)) {
-                Toast.makeText(this, "並べ替えは「優先順位」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "並べ替えは「優先順位（手動）」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
                 return true;
             }
             v.startDragAndDrop(null, new View.DragShadowBuilder(v), "do:" + t.id, 0);

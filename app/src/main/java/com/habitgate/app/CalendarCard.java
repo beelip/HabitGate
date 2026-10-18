@@ -85,7 +85,7 @@ public final class CalendarCard {
             LinearLayout row = new LinearLayout(activity);
             row.setOrientation(LinearLayout.HORIZONTAL);
             for (int c = 0; c < 7; c++) {
-                row.addView(buildCell(activity, cursor, first, cycleDate, byDate),
+                row.addView(buildCell(activity, db, cursor, first, cycleDate, byDate),
                         new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
                 cursor = cursor.plusDays(1);
             }
@@ -95,7 +95,7 @@ public final class CalendarCard {
         return root;
     }
 
-    private static LinearLayout buildCell(Activity activity, LocalDate date, LocalDate monthFirst,
+    private static LinearLayout buildCell(Activity activity, HabitDb db, LocalDate date, LocalDate monthFirst,
                                           String cycleDate, Map<String, List<Models.Task>> byDate) {
         boolean inMonth = date.getYear() == monthFirst.getYear() && date.getMonthValue() == monthFirst.getMonthValue();
         String iso = date.format(DateTools.DATE);
@@ -115,7 +115,7 @@ public final class CalendarCard {
             num.setTextColor(Ui.HINT);
         } else {
             int color;
-            if (date.getDayOfWeek() == DayOfWeek.SUNDAY || JapaneseHolidays.isHoliday(date)) {
+            if (date.getDayOfWeek() == DayOfWeek.SUNDAY || JapaneseHolidays.isHoliday(db, date)) {
                 color = Ui.DANGER;
             } else if (date.getDayOfWeek() == DayOfWeek.SATURDAY) {
                 color = SATURDAY_COLOR;

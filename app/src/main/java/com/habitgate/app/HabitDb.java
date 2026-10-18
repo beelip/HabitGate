@@ -10,12 +10,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class HabitDb extends SQLiteOpenHelper {
     // データ保持のため、旧版と同じ DB 名を維持する。
     private static final String DB_NAME = "friction_habit.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 7;
     public static final String CATEGORY_DO = "DO";
     public static final String CATEGORY_REDUCE = "REDUCE";
 
@@ -63,6 +65,7 @@ public class HabitDb extends SQLiteOpenHelper {
                 ")");
         createCyclesTable(db);
         createCategoriesTable(db);
+        createHolidaysTable(db);
         insertCycle(db, DateTools.today(), System.currentTimeMillis());
     }
 
@@ -125,6 +128,9 @@ public class HabitDb extends SQLiteOpenHelper {
             }
             createCategoriesTable(db);
         }
+        if (oldVersion < 7) {
+            createHolidaysTable(db);
+        }
     }
 
     private boolean hasColumn(SQLiteDatabase db, String table, String column) {
@@ -143,6 +149,46 @@ public class HabitDb extends SQLiteOpenHelper {
                 "color INTEGER NOT NULL," +
                 "created_at INTEGER NOT NULL" +
                 ")");
+    }
+
+    private void createHolidaysTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS holidays (" +
+                "date TEXT PRIMARY KEY," +
+                "name TEXT NOT NULL DEFAULT ''" +
+                ")");
+    }
+
+    /** 同期した祝日を全件入れ替える。rows は {isoDate, name}。再取得可能なキャッシュのため CSV バックアップには含めない。 */
+    public void replaceHolidays(List<String[]> rows) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete("holidays", null, null);
+            for (String[] row : rows) {
+                ContentValues v = new ContentValues();
+                v.put("date", row[0]);
+                v.put("name", row.length > 1 && row[1] != null ? row[1] : "");
+                db.insertWithOnConflict("holidays", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public Set<String> getHolidayDates() {
+        Set<String> dates = new HashSet<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT date FROM holidays", null)) {
+            while (c.moveToNext()) dates.add(c.getString(0));
+        }
+        return dates;
+    }
+
+    public int holidayCount() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM holidays", null)) {
+            if (c.moveToFirst()) return c.getInt(0);
+        }
+        return 0;
     }
 
     private void createCyclesTable(SQLiteDatabase db) {
