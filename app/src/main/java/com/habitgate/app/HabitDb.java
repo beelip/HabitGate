@@ -10,12 +10,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class HabitDb extends SQLiteOpenHelper {
     // データ保持のため、旧版と同じ DB 名を維持する。
     private static final String DB_NAME = "friction_habit.db";
-    private static final int DB_VERSION = 5;
+    private static final int DB_VERSION = 7;
     public static final String CATEGORY_DO = "DO";
     public static final String CATEGORY_REDUCE = "REDUCE";
 
@@ -36,7 +38,9 @@ public class HabitDb extends SQLiteOpenHelper {
                 "completed_date TEXT NOT NULL DEFAULT ''," +
                 "sort_order INTEGER NOT NULL DEFAULT 0," +
                 "priority INTEGER NOT NULL DEFAULT 0," +
-                "due_at INTEGER NOT NULL DEFAULT 0" +
+                "due_at INTEGER NOT NULL DEFAULT 0," +
+                "category_id INTEGER NOT NULL DEFAULT 0," +
+                "estimate_minutes INTEGER NOT NULL DEFAULT 0" +
                 ")");
         db.execSQL("CREATE TABLE reduce_items (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -56,9 +60,12 @@ public class HabitDb extends SQLiteOpenHelper {
                 "duration_minutes INTEGER NOT NULL," +
                 "actual_date TEXT NOT NULL," +
                 "created_at INTEGER NOT NULL," +
-                "synced INTEGER NOT NULL DEFAULT 0" +
+                "synced INTEGER NOT NULL DEFAULT 0," +
+                "category_id INTEGER NOT NULL DEFAULT 0" +
                 ")");
         createCyclesTable(db);
+        createCategoriesTable(db);
+        createHolidaysTable(db);
         insertCycle(db, DateTools.today(), System.currentTimeMillis());
     }
 
@@ -109,6 +116,21 @@ public class HabitDb extends SQLiteOpenHelper {
             db.execSQL("UPDATE do_tasks SET sort_order = id WHERE sort_order = 0");
             db.execSQL("UPDATE reduce_items SET sort_order = id WHERE sort_order = 0");
         }
+        if (oldVersion < 6) {
+            if (!hasColumn(db, "do_tasks", "category_id")) {
+                db.execSQL("ALTER TABLE do_tasks ADD COLUMN category_id INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!hasColumn(db, "do_tasks", "estimate_minutes")) {
+                db.execSQL("ALTER TABLE do_tasks ADD COLUMN estimate_minutes INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!hasColumn(db, "records", "category_id")) {
+                db.execSQL("ALTER TABLE records ADD COLUMN category_id INTEGER NOT NULL DEFAULT 0");
+            }
+            createCategoriesTable(db);
+        }
+        if (oldVersion < 7) {
+            createHolidaysTable(db);
+        }
     }
 
     private boolean hasColumn(SQLiteDatabase db, String table, String column) {
@@ -118,6 +140,55 @@ public class HabitDb extends SQLiteOpenHelper {
             }
         }
         return false;
+    }
+
+    private void createCategoriesTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS categories (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "name TEXT NOT NULL," +
+                "color INTEGER NOT NULL," +
+                "created_at INTEGER NOT NULL" +
+                ")");
+    }
+
+    private void createHolidaysTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS holidays (" +
+                "date TEXT PRIMARY KEY," +
+                "name TEXT NOT NULL DEFAULT ''" +
+                ")");
+    }
+
+    /** 同期した祝日を全件入れ替える。rows は {isoDate, name}。再取得可能なキャッシュのため CSV バックアップには含めない。 */
+    public void replaceHolidays(List<String[]> rows) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete("holidays", null, null);
+            for (String[] row : rows) {
+                ContentValues v = new ContentValues();
+                v.put("date", row[0]);
+                v.put("name", row.length > 1 && row[1] != null ? row[1] : "");
+                db.insertWithOnConflict("holidays", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public Set<String> getHolidayDates() {
+        Set<String> dates = new HashSet<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT date FROM holidays", null)) {
+            while (c.moveToNext()) dates.add(c.getString(0));
+        }
+        return dates;
+    }
+
+    public int holidayCount() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM holidays", null)) {
+            if (c.moveToFirst()) return c.getInt(0);
+        }
+        return 0;
     }
 
     private void createCyclesTable(SQLiteDatabase db) {
@@ -197,6 +268,10 @@ public class HabitDb extends SQLiteOpenHelper {
     }
 
     public long addDoTask(String title, String note, String plannedDate, int priority, long dueAt) {
+        return addDoTask(title, note, plannedDate, priority, dueAt, 0);
+    }
+
+    public long addDoTask(String title, String note, String plannedDate, int priority, long dueAt, long categoryId) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues v = new ContentValues();
         v.put("title", title.trim());
@@ -204,11 +279,12 @@ public class HabitDb extends SQLiteOpenHelper {
         v.put("planned_date", plannedDate);
         v.put("priority", priority);
         v.put("due_at", dueAt);
+        v.put("category_id", categoryId);
         v.put("created_at", System.currentTimeMillis());
         v.put("active", 1);
         long id = db.insert("do_tasks", null, v);
         if (id >= 0) {
-            db.execSQL("UPDATE do_tasks SET sort_order = id WHERE id = ?", new Object[]{id});
+            db.execSQL("UPDATE do_tasks SET sort_order = (SELECT IFNULL(MIN(sort_order), 0) - 1 FROM do_tasks) WHERE id = ?", new Object[]{id});
         }
         return id;
     }
@@ -262,9 +338,9 @@ public class HabitDb extends SQLiteOpenHelper {
         }
         ArrayList<Models.Task> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,title,planned_date,note,priority,due_at FROM do_tasks WHERE active=1 ORDER BY " + orderBy, null)) {
+                "SELECT id,title,planned_date,note,priority,due_at,category_id,estimate_minutes FROM do_tasks WHERE active=1 ORDER BY " + orderBy, null)) {
             while (c.moveToNext()) {
-                list.add(new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5)));
+                list.add(new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5), c.getLong(6), c.getInt(7)));
             }
         }
         return list;
@@ -273,10 +349,10 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Task> getDueDoTasks(String actualDate) {
         ArrayList<Models.Task> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,title,planned_date,note,priority,due_at FROM do_tasks WHERE active=1 AND planned_date<=? ORDER BY planned_date ASC, id ASC",
+                "SELECT id,title,planned_date,note,priority,due_at,category_id,estimate_minutes FROM do_tasks WHERE active=1 AND planned_date<=? ORDER BY planned_date ASC, id ASC",
                 new String[]{actualDate})) {
             while (c.moveToNext()) {
-                list.add(new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5)));
+                list.add(new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5), c.getLong(6), c.getInt(7)));
             }
         }
         return list;
@@ -337,12 +413,17 @@ public class HabitDb extends SQLiteOpenHelper {
     }
 
     public long addRecord(String category, String title, String note, int durationMinutes, String actualDate) {
+        return addRecord(category, title, note, durationMinutes, actualDate, 0);
+    }
+
+    public long addRecord(String category, String title, String note, int durationMinutes, String actualDate, long categoryId) {
         ContentValues v = new ContentValues();
         v.put("category", category);
         v.put("title", title);
         v.put("note", clean(note));
         v.put("duration_minutes", Math.max(0, durationMinutes));
         v.put("actual_date", actualDate);
+        v.put("category_id", categoryId);
         v.put("created_at", System.currentTimeMillis());
         v.put("synced", 0);
         return getWritableDatabase().insert("records", null, v);
@@ -358,22 +439,24 @@ public class HabitDb extends SQLiteOpenHelper {
 
     public Models.Task getDoTask(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,title,planned_date,note,priority,due_at FROM do_tasks WHERE id=?",
+                "SELECT id,title,planned_date,note,priority,due_at,category_id,estimate_minutes FROM do_tasks WHERE id=?",
                 new String[]{String.valueOf(id)})) {
             if (c.moveToFirst()) {
-                return new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5));
+                return new Models.Task(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getLong(5), c.getLong(6), c.getInt(7));
             }
         }
         return null;
     }
 
-    public void updateDoTask(long id, String title, String note, String plannedDate, int priority, long dueAt) {
+    public void updateDoTask(long id, String title, String note, String plannedDate, int priority, long dueAt, long categoryId, int estimateMinutes) {
         ContentValues v = new ContentValues();
         v.put("title", title.trim());
         v.put("note", clean(note));
         v.put("planned_date", plannedDate);
         v.put("priority", priority);
         v.put("due_at", dueAt);
+        v.put("category_id", categoryId);
+        v.put("estimate_minutes", Math.max(0, estimateMinutes));
         getWritableDatabase().update("do_tasks", v, "id=?", new String[]{String.valueOf(id)});
     }
 
@@ -477,7 +560,7 @@ public class HabitDb extends SQLiteOpenHelper {
 
     public Models.Record getRecord(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records WHERE id=?",
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records WHERE id=?",
                 new String[]{String.valueOf(id)})) {
             if (c.moveToFirst()) return recordFromCursor(c);
         }
@@ -500,7 +583,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getRecords(String fromDateInclusive, String toDateInclusive) {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records " +
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records " +
                         "WHERE actual_date>=? AND actual_date<=? ORDER BY actual_date DESC, id DESC",
                 new String[]{fromDateInclusive, toDateInclusive})) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
@@ -511,7 +594,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getAllRecords() {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records ORDER BY actual_date DESC, id DESC", null)) {
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records ORDER BY actual_date DESC, id DESC", null)) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
         }
         return list;
@@ -520,7 +603,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getUnsyncedRecords() {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records WHERE synced=0 ORDER BY id ASC", null)) {
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records WHERE synced=0 ORDER BY id ASC", null)) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
         }
         return list;
@@ -596,6 +679,48 @@ public class HabitDb extends SQLiteOpenHelper {
         return totals;
     }
 
+    public List<Models.Category> getCategories() {
+        ArrayList<Models.Category> list = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id,name,color FROM categories ORDER BY id ASC", null)) {
+            while (c.moveToNext()) list.add(new Models.Category(c.getLong(0), c.getString(1), c.getInt(2)));
+        }
+        return list;
+    }
+
+    public Models.Category getCategory(long id) {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id,name,color FROM categories WHERE id=?", new String[]{String.valueOf(id)})) {
+            if (c.moveToFirst()) return new Models.Category(c.getLong(0), c.getString(1), c.getInt(2));
+        }
+        return null;
+    }
+
+    public long addCategory(String name, int color) {
+        ContentValues v = new ContentValues();
+        v.put("name", name == null ? "" : name.trim());
+        v.put("color", color);
+        v.put("created_at", System.currentTimeMillis());
+        return getWritableDatabase().insert("categories", null, v);
+    }
+
+    // 参照している do_tasks.category_id には触らない（孤児は「その他」扱い）。
+    public void deleteCategory(long id) {
+        getWritableDatabase().delete("categories", "id=?", new String[]{String.valueOf(id)});
+    }
+
+    // DO 実績のカテゴリ別合計。戻り値は {categoryId, minutes}。
+    public List<long[]> getCategoryTotals(String from, String to) {
+        ArrayList<long[]> list = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT category_id, IFNULL(SUM(duration_minutes),0) FROM records " +
+                        "WHERE category='DO' AND actual_date>=? AND actual_date<=? GROUP BY category_id",
+                new String[]{from, to})) {
+            while (c.moveToNext()) list.add(new long[]{c.getLong(0), c.getLong(1)});
+        }
+        return list;
+    }
+
     public JSONArray recordsToJson(List<Models.Record> records) throws Exception {
         JSONArray arr = new JSONArray();
         for (Models.Record r : records) {
@@ -629,7 +754,7 @@ public class HabitDb extends SQLiteOpenHelper {
     private Models.Record recordFromCursor(Cursor c) {
         return new Models.Record(
                 c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4),
-                c.getString(5), c.getLong(6), c.getInt(7) == 1);
+                c.getString(5), c.getLong(6), c.getInt(7) == 1, c.getLong(8));
     }
 
     private Models.Cycle cycleFromCursor(Cursor c) {

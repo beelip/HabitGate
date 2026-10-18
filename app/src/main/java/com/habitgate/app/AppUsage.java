@@ -1,5 +1,6 @@
 package com.habitgate.app;
 
+import android.app.Activity;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -9,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Process;
 import android.provider.Settings;
+import android.widget.Toast;
 
 import java.text.Collator;
 import java.util.ArrayList;
@@ -44,6 +46,22 @@ public final class AppUsage {
 
     public static Intent usageAccessSettingsIntent() {
         return new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+    }
+
+    /** 使用状況へのアクセス権限の案内ダイアログを表示する。 */
+    public static void promptUsageAccess(Activity activity, String appLabel) {
+        Ui.dialog(activity)
+                .setTitle("使用状況へのアクセスが必要です")
+                .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
+                .setPositiveButton("設定を開く", (dialog, which) -> {
+                    try {
+                        activity.startActivity(usageAccessSettingsIntent());
+                    } catch (Exception e) {
+                        Toast.makeText(activity, "設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("あとで", null)
+                .show();
     }
 
     /**

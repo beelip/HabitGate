@@ -18,6 +18,23 @@ public final class ListRows {
 
         LinearLayout col = Ui.vertical(activity);
         col.addView(Ui.body(activity, DateTools.formatShortDateWithWeekday(t.plannedDate) + "  " + t.title));
+        if (t.categoryId > 0) {
+            Models.Category category = db.getCategory(t.categoryId);
+            if (category != null) {
+                TextView categoryLine = new TextView(activity);
+                categoryLine.setText("● " + category.name);
+                categoryLine.setTextSize(13);
+                categoryLine.setTextColor(category.color);
+                col.addView(categoryLine);
+            }
+        }
+        if (t.estimateMinutes > 0) {
+            TextView estimateLine = new TextView(activity);
+            estimateLine.setText("⏱ 見積: " + DateTools.formatEstimate(t.estimateMinutes));
+            estimateLine.setTextSize(13);
+            estimateLine.setTextColor(Ui.HINT);
+            col.addView(estimateLine);
+        }
         if (t.dueAt > 0) {
             TextView dueLine = new TextView(activity);
             dueLine.setText("⏰ 期限: " + DateTools.formatDateTime(t.dueAt));

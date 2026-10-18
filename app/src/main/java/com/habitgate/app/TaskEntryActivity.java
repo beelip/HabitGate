@@ -1,12 +1,9 @@
 package com.habitgate.app;
 
-import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -24,18 +21,18 @@ public class TaskEntryActivity extends ThemedActivity {
     private HabitDb db;
     private Models.Task task;
     private String entryDate;
-    private String memo = "";
     private String hoursText = "";
     private String minutesText = "";
 
     private EditText hoursEdit;
     private EditText minutesEdit;
-    private TextView memoPreview;
+    private MemoField recordMemo;
     private CheckBox completeCheck;
     private TextView plannedText;
     private Button priorityButton;
     private Button dueButton;
-    private TextView taskNoteText;
+    private Button estimateButton;
+    private MemoField taskNote;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,8 +50,9 @@ public class TaskEntryActivity extends ThemedActivity {
     }
 
     private void buildUi() {
+        String prevMemo = recordMemo == null ? "" : recordMemo.get();
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "実績入力"));
+        root.addView(Ui.titleWithBack(this, "実績入力"));
 
         // タスク情報
         LinearLayout infoCard = Ui.card(this, root);
@@ -77,19 +75,15 @@ public class TaskEntryActivity extends ThemedActivity {
         plannedRow.addView(plannedDateButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         infoCard.addView(plannedRow);
 
-        LinearLayout taskNoteRow = Ui.horizontal(this);
-        taskNoteText = new TextView(this);
-        taskNoteText.setTextSize(13);
-        taskNoteText.setMaxLines(3);
-        taskNoteText.setEllipsize(TextUtils.TruncateAt.END);
-        updateTaskNoteText();
-        taskNoteText.setOnClickListener(v -> openTaskNoteDialog());
-        taskNoteRow.addView(taskNoteText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button taskNoteButton = Ui.iconButton(this, "📝");
-        taskNoteButton.setContentDescription("タスクのメモを編集");
-        taskNoteButton.setOnClickListener(v -> openTaskNoteDialog());
-        taskNoteRow.addView(taskNoteButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        infoCard.addView(taskNoteRow);
+        taskNote = new MemoField(this, "タスクのメモ", "メモ（任意）", "メモ: ", Ui.MUTED, task.note)
+                .setOnSaved(newNote -> {
+                    db.updateDoTask(task.id, task.title, newNote, task.plannedDate, task.priority, task.dueAt, task.categoryId, task.estimateMinutes);
+                    AutoSync.run(this);
+                    task = db.getDoTask(task.id);
+                    taskNote.set(task.note);
+                    Toast.makeText(this, "メモを保存しました", Toast.LENGTH_SHORT).show();
+                });
+        infoCard.addView(taskNote.view());
 
         LinearLayout taskOptionsRow = Ui.horizontal(this);
         priorityButton = Ui.button(this, "優先度: " + DateTools.priorityLabel(task.priority));
@@ -100,7 +94,7 @@ public class TaskEntryActivity extends ThemedActivity {
         dueButton = Ui.button(this, "期限: " + DateTools.formatDueShort(task.dueAt));
         dueButton.setOnClickListener(v -> openTaskDueDatePicker());
         dueButton.setOnLongClickListener(v -> {
-            db.updateDoTask(task.id, task.title, task.note, task.plannedDate, task.priority, 0);
+            db.updateDoTask(task.id, task.title, task.note, task.plannedDate, task.priority, 0, task.categoryId, task.estimateMinutes);
             AutoSync.run(this);
             task = db.getDoTask(task.id);
             dueButton.setText("期限: " + DateTools.formatDueShort(task.dueAt));
@@ -109,6 +103,11 @@ public class TaskEntryActivity extends ThemedActivity {
         });
         taskOptionsRow.addView(dueButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         infoCard.addView(taskOptionsRow);
+
+        Ui.space(this, infoCard, 8);
+        estimateButton = Ui.button(this, "見積: " + DateTools.formatEstimate(task.estimateMinutes));
+        estimateButton.setOnClickListener(v -> openEstimateDialog());
+        infoCard.addView(estimateButton);
 
         // 入力
         LinearLayout inputCard = Ui.card(this, root);
@@ -126,26 +125,15 @@ public class TaskEntryActivity extends ThemedActivity {
         dateRow.addView(changeDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         inputCard.addView(dateRow);
 
-        LinearLayout duration = durationRow();
-        hoursEdit = (EditText) duration.getChildAt(1);
-        minutesEdit = (EditText) duration.getChildAt(3);
+        Forms.DurationInput duration = Forms.duration(this, "時間: ");
+        hoursEdit = duration.hours;
+        minutesEdit = duration.minutes;
         if (!hoursText.isEmpty()) hoursEdit.setText(hoursText);
         if (!minutesText.isEmpty()) minutesEdit.setText(minutesText);
-        inputCard.addView(duration);
+        inputCard.addView(duration.row);
 
-        LinearLayout memoRow = Ui.horizontal(this);
-        memoPreview = new TextView(this);
-        memoPreview.setMaxLines(2);
-        memoPreview.setEllipsize(TextUtils.TruncateAt.END);
-        memoPreview.setTextSize(14);
-        updateMemoPreview();
-        memoPreview.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoPreview, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button memoButton = Ui.iconButton(this, "📝");
-        memoButton.setContentDescription("実績メモを編集");
-        memoButton.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        inputCard.addView(memoRow);
+        recordMemo = new MemoField(this, "実績メモ", "実績メモ（任意）", "", Ui.TEXT, prevMemo);
+        inputCard.addView(recordMemo.view());
 
         LinearLayout completeRow = Ui.horizontal(this);
         completeCheck = new CheckBox(this);
@@ -168,85 +156,6 @@ public class TaskEntryActivity extends ThemedActivity {
         root.addView(delete);
     }
 
-    private LinearLayout durationRow() {
-        LinearLayout row = Ui.horizontal(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView label = new TextView(this);
-        label.setText("時間: ");
-        row.addView(label);
-        EditText h = Ui.numberEdit(this, "0", 99);
-        row.addView(h);
-        TextView colon = new TextView(this);
-        colon.setText(" 時間 ");
-        row.addView(colon);
-        EditText m = Ui.numberEdit(this, "0", 59);
-        row.addView(m);
-        TextView suffix = new TextView(this);
-        suffix.setText(" 分");
-        row.addView(suffix);
-        return row;
-    }
-
-    private void updateTaskNoteText() {
-        if (task.note.isEmpty()) {
-            taskNoteText.setText("メモ（任意）");
-            taskNoteText.setTextColor(Ui.HINT);
-        } else {
-            taskNoteText.setText("メモ: " + task.note);
-            taskNoteText.setTextColor(Ui.MUTED);
-        }
-    }
-
-    private void openTaskNoteDialog() {
-        EditText input = Ui.multilineEdit(this, "メモ（任意）");
-        input.setText(task.note);
-        int pad = Ui.dp(this, 18);
-        LinearLayout wrapper = Ui.vertical(this);
-        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
-        wrapper.addView(input);
-        Ui.dialog(this)
-                .setTitle("タスクのメモ")
-                .setView(wrapper)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    String newNote = input.getText().toString().trim();
-                    db.updateDoTask(task.id, task.title, newNote, task.plannedDate, task.priority, task.dueAt);
-                    AutoSync.run(this);
-                    task = db.getDoTask(task.id);
-                    updateTaskNoteText();
-                    Toast.makeText(this, "メモを保存しました", Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
-    }
-
-    private void updateMemoPreview() {
-        if (memo.isEmpty()) {
-            memoPreview.setText("実績メモ（任意）");
-            memoPreview.setTextColor(Ui.HINT);
-        } else {
-            memoPreview.setText(memo);
-            memoPreview.setTextColor(Ui.TEXT);
-        }
-    }
-
-    private void openMemoDialog() {
-        EditText input = Ui.multilineEdit(this, "実績メモ（任意）");
-        input.setText(memo);
-        int pad = Ui.dp(this, 18);
-        LinearLayout wrapper = Ui.vertical(this);
-        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
-        wrapper.addView(input);
-        Ui.dialog(this)
-                .setTitle("実績メモ")
-                .setView(wrapper)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    memo = input.getText().toString().trim();
-                    updateMemoPreview();
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
-    }
-
     private void openDatePicker() {
         hoursText = hoursEdit.getText().toString();
         minutesText = minutesEdit.getText().toString();
@@ -261,7 +170,7 @@ public class TaskEntryActivity extends ThemedActivity {
         LocalDate initial = DateTools.parseOrToday(task.plannedDate);
         new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
             String newDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
-            db.updateDoTask(task.id, task.title, task.note, newDate, task.priority, task.dueAt);
+            db.updateDoTask(task.id, task.title, task.note, newDate, task.priority, task.dueAt, task.categoryId, task.estimateMinutes);
             AutoSync.run(this);
             task = db.getDoTask(task.id);
             plannedText.setText("予定日: " + DateTools.formatShortDateWithWeekday(task.plannedDate));
@@ -273,12 +182,34 @@ public class TaskEntryActivity extends ThemedActivity {
         Ui.dialog(this)
                 .setTitle("優先度")
                 .setItems(new String[]{"なし", "低", "中", "高"}, (d, which) -> {
-                    db.updateDoTask(task.id, task.title, task.note, task.plannedDate, which, task.dueAt);
+                    db.updateDoTask(task.id, task.title, task.note, task.plannedDate, which, task.dueAt, task.categoryId, task.estimateMinutes);
                     AutoSync.run(this);
                     task = db.getDoTask(task.id);
                     priorityButton.setText("優先度: " + DateTools.priorityLabel(task.priority));
                     Toast.makeText(this, "優先度を変更しました", Toast.LENGTH_SHORT).show();
                 })
+                .show();
+    }
+
+    private void openEstimateDialog() {
+        Forms.EstimateInput input = Forms.estimate(this, "", task.estimateMinutes);
+        int pad = Ui.dp(this, 18);
+        LinearLayout wrapper = Ui.vertical(this);
+        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
+        wrapper.addView(input.row);
+        wrapper.addView(Ui.note(this, "すべて 0 にすると見積もりなしになります。"));
+        Ui.dialog(this)
+                .setTitle("見積もり時間")
+                .setView(wrapper)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    db.updateDoTask(task.id, task.title, task.note, task.plannedDate, task.priority, task.dueAt,
+                            task.categoryId, input.totalMinutes());
+                    AutoSync.run(this);
+                    task = db.getDoTask(task.id);
+                    estimateButton.setText("見積: " + DateTools.formatEstimate(task.estimateMinutes));
+                    Toast.makeText(this, "見積もりを保存しました", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("キャンセル", null)
                 .show();
     }
 
@@ -295,7 +226,7 @@ public class TaskEntryActivity extends ThemedActivity {
     private void openTaskDueTimePicker(LocalDate date, int initialHour, int initialMinute) {
         new TimePickerDialog(this, Ui.pickerTheme(), (view, hourOfDay, minute) -> {
             long newDueAt = date.atTime(hourOfDay, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            db.updateDoTask(task.id, task.title, task.note, task.plannedDate, task.priority, newDueAt);
+            db.updateDoTask(task.id, task.title, task.note, task.plannedDate, task.priority, newDueAt, task.categoryId, task.estimateMinutes);
             AutoSync.run(this);
             task = db.getDoTask(task.id);
             dueButton.setText("期限: " + DateTools.formatDueShort(task.dueAt));
@@ -306,11 +237,11 @@ public class TaskEntryActivity extends ThemedActivity {
     private void onSave() {
         int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
         if (!completeCheck.isChecked()) {
-            if (minutes == 0 && memo.isEmpty()) {
+            if (minutes == 0 && recordMemo.get().isEmpty()) {
                 Toast.makeText(this, "入力がありません", Toast.LENGTH_SHORT).show();
                 return;
             }
-            db.addRecord(HabitDb.CATEGORY_DO, task.title, mergeNotes(task.note, memo), minutes, entryDate);
+            db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId);
             AutoSync.run(this);
             Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
             finish();
@@ -320,7 +251,7 @@ public class TaskEntryActivity extends ThemedActivity {
                 .setTitle("完了しますか？")
                 .setMessage("「" + task.title + "」を完了します。")
                 .setPositiveButton("完了", (dialog, which) -> {
-                    db.addRecord(HabitDb.CATEGORY_DO, task.title, mergeNotes(task.note, memo), minutes, entryDate);
+                    db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId);
                     db.completeDoTask(task.id, entryDate);
                     AutoSync.run(this);
                     Toast.makeText(this, "完了しました", Toast.LENGTH_SHORT).show();
@@ -357,13 +288,5 @@ public class TaskEntryActivity extends ThemedActivity {
                 })
                 .setNegativeButton("キャンセル", null)
                 .show();
-    }
-
-    private String mergeNotes(String itemNote, String actualNote) {
-        String left = itemNote == null ? "" : itemNote.trim();
-        String right = actualNote == null ? "" : actualNote.trim();
-        if (left.isEmpty()) return right;
-        if (right.isEmpty()) return left;
-        return "項目メモ: " + left + " / 実績メモ: " + right;
     }
 }

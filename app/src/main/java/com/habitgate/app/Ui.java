@@ -70,6 +70,14 @@ public final class Ui {
         scroll.addView(root);
         activity.setContentView(scroll);
 
+        applyWindowChrome(activity);
+        applyInsets(scroll);
+
+        return root;
+    }
+
+    /** ステータスバー等のウィンドウ装飾をテーマに合わせる。 */
+    public static void applyWindowChrome(Activity activity) {
         activity.getWindow().setBackgroundDrawable(new ColorDrawable(BG));
         activity.getWindow().setStatusBarColor(BG);
         activity.getWindow().setNavigationBarColor(BG);
@@ -81,8 +89,11 @@ public final class Ui {
             flags &= ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         }
         decor.setSystemUiVisibility(flags);
+    }
 
-        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+    /** システムバーのインセットを v の上下 padding に反映する。 */
+    public static void applyInsets(View v) {
+        v.setOnApplyWindowInsetsListener((view, insets) -> {
             int top;
             int bottom;
             if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -93,12 +104,10 @@ public final class Ui {
                 top = insets.getSystemWindowInsetTop();
                 bottom = insets.getSystemWindowInsetBottom();
             }
-            v.setPadding(0, top, 0, bottom);
+            view.setPadding(0, top, 0, bottom);
             return insets;
         });
-        scroll.requestApplyInsets();
-
-        return root;
+        v.requestApplyInsets();
     }
 
     public static TextView title(Context context, String text) {
@@ -113,6 +122,21 @@ public final class Ui {
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         tv.setPadding(0, dp(context, 10), 0, dp(context, 12));
         return tv;
+    }
+
+    /** 「<」戻るボタン付きのタイトル行。トップ画面以外で使う。 */
+    public static LinearLayout titleWithBack(Activity activity, String text) {
+        LinearLayout row = horizontal(activity);
+        Button back = iconButton(activity, "<");
+        back.setContentDescription("前の画面に戻る");
+        back.setOnClickListener(v -> activity.finish());
+        row.addView(back, new LinearLayout.LayoutParams(dp(activity, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView tv = title(activity, text);
+        row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        // タイトルの中央寄せバランスを保つための右側スペーサ
+        View spacer = new View(activity);
+        row.addView(spacer, new LinearLayout.LayoutParams(dp(activity, 48), 1));
+        return row;
     }
 
     public static TextView section(Context context, String text) {

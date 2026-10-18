@@ -1,10 +1,10 @@
 package com.habitgate.app;
 
-import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 /** やること／減らすことの追加・一覧・削除・アプリ連携を行う編集画面。 */
@@ -30,6 +31,11 @@ public class TaskEditActivity extends ThemedActivity {
     private long addDueAt = 0;
     private Button addPriorityButton;
     private Button addDueButton;
+    private long addCategoryId = 0;
+    private Button addCategoryButton;
+    private Button sortChip;
+    private String sortMode = "manual";
+    private final List<Long> doOrder = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,7 +52,7 @@ public class TaskEditActivity extends ThemedActivity {
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "タスク編集"));
+        root.addView(Ui.titleWithBack(this, "タスク編集"));
 
         // やることを追加
         root.addView(Ui.section(this, "やることを追加"));
@@ -71,6 +77,15 @@ public class TaskEditActivity extends ThemedActivity {
         addDoOptionsRow.addView(addDueButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         doAddCard.addView(addDoOptionsRow);
 
+        Ui.space(this, doAddCard, 8);
+        addCategoryButton = Ui.button(this, categoryButtonLabel(addCategoryId));
+        addCategoryButton.setOnClickListener(v -> CategoryActivity.showPicker(this, db, addCategoryId, categoryId -> {
+            addCategoryId = categoryId;
+            addCategoryButton.setText(categoryButtonLabel(addCategoryId));
+        }));
+        doAddCard.addView(addCategoryButton);
+        Ui.space(this, doAddCard, 8);
+
         addDoNote = Ui.memoEdit(this, "メモ（任意）");
         doAddCard.addView(addDoNote);
         LinearLayout addDoButtons = Ui.horizontal(this);
@@ -89,10 +104,15 @@ public class TaskEditActivity extends ThemedActivity {
         addDoButtons.addView(addDoNext, grow2);
         addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         doAddCard.addView(addDoButtons);
-        doAddCard.addView(Ui.note(this, "項目をタップすると実績入力、長押しすると編集を開きます。期限ボタンの長押しでクリアできます。"));
+        doAddCard.addView(Ui.note(this, "項目をタップすると編集、✏ で実績入力、長押しドラッグで並べ替えできます（並べ替えは「優先順位（手動）」ソート時）。期限ボタンの長押しでクリアできます。"));
 
         // やること一覧
-        root.addView(Ui.section(this, "やること"));
+        LinearLayout doHeaderRow = Ui.horizontal(this);
+        doHeaderRow.addView(Ui.section(this, "やること"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        sortChip = Ui.chip(this, "⇅ 優先順位");
+        sortChip.setOnClickListener(v -> openSortDialog());
+        doHeaderRow.addView(sortChip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(doHeaderRow);
         LinearLayout doCard = Ui.card(this, root);
         doList = Ui.vertical(this);
         doCard.addView(doList);
@@ -121,6 +141,30 @@ public class TaskEditActivity extends ThemedActivity {
         root.addView(back);
 
         refreshLists();
+    }
+
+    private String categoryButtonLabel(long categoryId) {
+        Models.Category category = categoryId > 0 ? db.getCategory(categoryId) : null;
+        return "カテゴリ: " + (category == null ? "なし" : category.name);
+    }
+
+    private void openSortDialog() {
+        Ui.dialog(this)
+                .setTitle("並び順")
+                .setItems(new String[]{"優先順位（手動）", "優先度", "期限", "予定日", "作成日"}, (dialog, which) -> {
+                    String[] values = {"manual", "priority", "due", "planned", "created"};
+                    ReminderScheduler.prefs(this).edit().putString("do_sort_mode", values[which]).apply();
+                    refreshLists();
+                })
+                .show();
+    }
+
+    private String sortChipLabel(String mode) {
+        if ("priority".equals(mode)) return "⇅ 優先度";
+        if ("due".equals(mode)) return "⇅ 期限";
+        if ("planned".equals(mode)) return "⇅ 予定日";
+        if ("created".equals(mode)) return "⇅ 作成日";
+        return "⇅ 優先順位";
     }
 
     private void openTaskDatePicker() {
@@ -166,13 +210,15 @@ public class TaskEditActivity extends ThemedActivity {
             Toast.makeText(this, "タスク名を入力してください", Toast.LENGTH_SHORT).show();
             return;
         }
-        db.addDoTask(title, addDoNote.getText().toString(), plannedDate, addPriority, addDueAt);
+        db.addDoTask(title, addDoNote.getText().toString(), plannedDate, addPriority, addDueAt, addCategoryId);
         addDoTitle.setText("");
         addDoNote.setText("");
         addPriority = 0;
         addDueAt = 0;
+        addCategoryId = 0;
         addPriorityButton.setText("優先度: " + DateTools.priorityLabel(addPriority));
         addDueButton.setText("期限: " + DateTools.formatDueShort(addDueAt));
+        addCategoryButton.setText(categoryButtonLabel(addCategoryId));
         AutoSync.run(this);
         refreshLists();
         Toast.makeText(this, DateTools.formatShortDateWithWeekday(plannedDate) + " に追加しました", Toast.LENGTH_SHORT).show();
@@ -195,8 +241,13 @@ public class TaskEditActivity extends ThemedActivity {
     private void refreshLists() {
         if (doList == null || reduceList == null) return;
 
+        sortMode = ReminderScheduler.prefs(this).getString("do_sort_mode", "manual");
+        if (sortChip != null) sortChip.setText(sortChipLabel(sortMode));
+
         doList.removeAllViews();
-        List<Models.Task> tasks = db.getActiveDoTasks();
+        doOrder.clear();
+        List<Models.Task> tasks = db.getActiveDoTasks(sortMode);
+        for (Models.Task t : tasks) doOrder.add(t.id);
         if (tasks.isEmpty()) {
             doList.addView(Ui.note(this, "登録されているやることはありません。"));
         } else {
@@ -222,14 +273,14 @@ public class TaskEditActivity extends ThemedActivity {
                 }
                 row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-                Button del = Ui.iconButton(this, "🗑");
-                del.setContentDescription("削除");
-                del.setOnClickListener(v -> confirmDelete("やること", t.title, () -> {
-                    db.deleteDoTask(t.id);
-                    AutoSync.run(this);
-                    refreshLists();
-                }));
-                row.addView(del, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+                Button pencil = Ui.iconButton(this, "✏");
+                pencil.setContentDescription("実績入力");
+                pencil.setOnClickListener(v -> {
+                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    intent.putExtra("task_id", t.id);
+                    startActivity(intent);
+                });
+                row.addView(pencil, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
 
                 int tint = Ui.priorityTint(t.priority);
                 Ui.tappableRow(row, tint);
@@ -237,16 +288,19 @@ public class TaskEditActivity extends ThemedActivity {
                     row.setPadding(Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
                 }
                 row.setOnClickListener(v -> {
-                    Intent intent = new Intent(this, TaskEntryActivity.class);
+                    Intent intent = new Intent(this, TaskFormActivity.class);
                     intent.putExtra("task_id", t.id);
                     startActivity(intent);
                 });
                 row.setOnLongClickListener(v -> {
-                    Intent intent = new Intent(this, TaskFormActivity.class);
-                    intent.putExtra("task_id", t.id);
-                    startActivity(intent);
+                    if (!"manual".equals(sortMode)) {
+                        Toast.makeText(this, "並べ替えは「優先順位（手動）」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
+                    v.startDragAndDrop(null, new View.DragShadowBuilder(v), "do:" + t.id, 0);
                     return true;
                 });
+                Reorder.wireRow(row, "do", t.id, this, doOrder, db::saveDoTaskOrder, this::refreshLists);
                 doList.addView(row);
             }
         }
@@ -307,24 +361,9 @@ public class TaskEditActivity extends ThemedActivity {
             } else if (AppUsage.hasPermission(this)) {
                 Toast.makeText(this, AppUsage.appLabel(this, packageName) + " を連携しました", Toast.LENGTH_SHORT).show();
             } else {
-                promptUsageAccess(AppUsage.appLabel(this, packageName));
+                AppUsage.promptUsageAccess(this, AppUsage.appLabel(this, packageName));
             }
         });
-    }
-
-    private void promptUsageAccess(String appLabel) {
-        Ui.dialog(this)
-                .setTitle("使用状況へのアクセスが必要です")
-                .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
-                .setPositiveButton("設定を開く", (dialog, which) -> {
-                    try {
-                        startActivity(AppUsage.usageAccessSettingsIntent());
-                    } catch (Exception e) {
-                        Toast.makeText(this, "設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("あとで", null)
-                .show();
     }
 
     private void confirmDelete(String type, String title, Runnable onConfirm) {

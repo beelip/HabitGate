@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.DragEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -29,6 +28,10 @@ public class MainActivity extends ThemedActivity {
     private final List<Long> reduceOrder = new ArrayList<>();
     private boolean todayCollapsed = false;
     private boolean laterCollapsed = false;
+    private String calendarMonth;
+    private boolean calendarCollapsed;
+    private LinearLayout calendarContainer;
+    private Button calendarToggle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,7 +53,15 @@ public class MainActivity extends ThemedActivity {
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
 
-        root.addView(Ui.title(this, "HabitGate"));
+        // タイトル行: 左にスペーサ、中央にタイトル、右に設定ボタン
+        LinearLayout titleRow = Ui.horizontal(this);
+        titleRow.addView(new View(this), new LinearLayout.LayoutParams(Ui.dp(this, 48), 1));
+        titleRow.addView(Ui.title(this, "HabitGate"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button settings = Ui.iconButton(this, "⚙");
+        settings.setContentDescription("設定");
+        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        titleRow.addView(settings, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(titleRow);
 
         // 現在のサイクル + 主要アクション
         LinearLayout cycleCard = Ui.card(this, root);
@@ -74,13 +85,25 @@ public class MainActivity extends ThemedActivity {
         LinearLayout navRow = Ui.horizontal(this);
         Button stats = Ui.button(this, "📊 集計");
         stats.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
-        Button settings = Ui.button(this, "⚙ 設定");
-        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        half.rightMargin = Ui.dp(this, 8);
-        navRow.addView(stats, half);
-        navRow.addView(settings, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        navRow.addView(stats, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         root.addView(navRow);
+
+        // カレンダー
+        calendarMonth = DateTools.startOfMonthOf(db.getCurrentCycle().cycleDate);
+        calendarCollapsed = ReminderScheduler.prefs(this).getBoolean("calendar_collapsed", false);
+        LinearLayout calendarHeaderRow = Ui.horizontal(this);
+        calendarHeaderRow.addView(Ui.section(this, "カレンダー"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        calendarToggle = Ui.chip(this, calendarCollapsed ? "▸" : "▾");
+        calendarToggle.setContentDescription("カレンダーの表示切り替え");
+        calendarToggle.setOnClickListener(v -> {
+            calendarCollapsed = !calendarCollapsed;
+            ReminderScheduler.prefs(this).edit().putBoolean("calendar_collapsed", calendarCollapsed).apply();
+            rebuildCalendar();
+        });
+        calendarHeaderRow.addView(calendarToggle, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(calendarHeaderRow);
+        calendarContainer = Ui.vertical(this);
+        root.addView(calendarContainer);
 
         // やること
         LinearLayout doHeaderRow = Ui.horizontal(this);
@@ -105,7 +128,7 @@ public class MainActivity extends ThemedActivity {
     private void openSortDialog() {
         Ui.dialog(this)
                 .setTitle("並び順")
-                .setItems(new String[]{"優先順位（手動並べ替え）", "優先度", "期限", "予定日", "作成日"}, (dialog, which) -> {
+                .setItems(new String[]{"優先順位（手動）", "優先度", "期限", "予定日", "作成日"}, (dialog, which) -> {
                     String[] values = {"manual", "priority", "due", "planned", "created"};
                     ReminderScheduler.prefs(this).edit().putString("do_sort_mode", values[which]).apply();
                     refreshLists();
@@ -203,11 +226,24 @@ public class MainActivity extends ThemedActivity {
                     v.startDragAndDrop(null, new View.DragShadowBuilder(v), "reduce:" + item.id, 0);
                     return true;
                 });
-                row.setOnDragListener(this::onRowDrag);
-                row.setTag("reduce:" + item.id);
+                Reorder.wireRow(row, "reduce", item.id, this, reduceOrder, db::saveReduceItemOrder, this::refreshLists);
                 reduceList.addView(row);
             }
         }
+
+        rebuildCalendar();
+    }
+
+    private void rebuildCalendar() {
+        if (calendarContainer == null) return;
+        if (calendarToggle != null) calendarToggle.setText(calendarCollapsed ? "▸" : "▾");
+        calendarContainer.removeAllViews();
+        if (calendarCollapsed) return;
+        LinearLayout card = Ui.card(this, calendarContainer);
+        card.addView(CalendarCard.build(this, db, calendarMonth, newMonth -> {
+            calendarMonth = newMonth;
+            rebuildCalendar();
+        }));
     }
 
     private TextView buildGroupHeader(String label, int count, boolean collapsed) {
@@ -227,61 +263,15 @@ public class MainActivity extends ThemedActivity {
         LinearLayout row = ListRows.taskRow(this, db, t, cycle, this::refreshLists);
         row.setOnLongClickListener(v -> {
             if (!"manual".equals(sortMode)) {
-                Toast.makeText(this, "並べ替えは「優先順位」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "並べ替えは「優先順位（手動）」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
                 return true;
             }
             v.startDragAndDrop(null, new View.DragShadowBuilder(v), "do:" + t.id, 0);
             return true;
         });
-        row.setOnDragListener(this::onRowDrag);
-        row.setTag("do:" + t.id);
+        Reorder.wireRow(row, "do", t.id, this, doOrder, db::saveDoTaskOrder, this::refreshLists);
 
         container.addView(row);
-    }
-
-    private boolean onRowDrag(View v, DragEvent event) {
-        Object local = event.getLocalState();
-        String dragged = local instanceof String ? (String) local : "";
-        String target = v.getTag() instanceof String ? (String) v.getTag() : "";
-        switch (event.getAction()) {
-            case DragEvent.ACTION_DRAG_STARTED:
-                return !dragged.isEmpty() && !target.isEmpty()
-                        && dragged.substring(0, dragged.indexOf(':')).equals(target.substring(0, target.indexOf(':')));
-            case DragEvent.ACTION_DRAG_ENTERED:
-                v.setAlpha(0.4f);
-                return true;
-            case DragEvent.ACTION_DRAG_EXITED:
-            case DragEvent.ACTION_DRAG_ENDED:
-                v.setAlpha(1f);
-                return true;
-            case DragEvent.ACTION_DROP:
-                v.setAlpha(1f);
-                handleDrop(dragged, target);
-                return true;
-            default:
-                return true;
-        }
-    }
-
-    private void handleDrop(String dragged, String target) {
-        if (dragged.isEmpty() || target.isEmpty() || dragged.equals(target)) return;
-        boolean isDo = dragged.startsWith("do:");
-        List<Long> order = isDo ? doOrder : reduceOrder;
-        long draggedId = Long.parseLong(dragged.substring(dragged.indexOf(':') + 1));
-        long targetId = Long.parseLong(target.substring(target.indexOf(':') + 1));
-        int from = order.indexOf(draggedId);
-        int to = order.indexOf(targetId);
-        if (from < 0 || to < 0) return;
-        List<Long> next = new ArrayList<>(order);
-        next.remove(Long.valueOf(draggedId));
-        int insertAt = next.indexOf(targetId);
-        if (from < to) insertAt += 1;
-        if (insertAt < 0) insertAt = next.size();
-        if (insertAt > next.size()) insertAt = next.size();
-        next.add(insertAt, draggedId);
-        if (isDo) db.saveDoTaskOrder(next); else db.saveReduceItemOrder(next);
-        AutoSync.run(this);
-        refreshLists();
     }
 
     private void requestNotificationPermissionIfNeeded() {

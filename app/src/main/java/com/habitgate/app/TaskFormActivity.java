@@ -27,6 +27,9 @@ public class TaskFormActivity extends ThemedActivity {
     private String plannedDate;
     private int priority;
     private long dueAt;
+    private long categoryId;
+    private TextView categoryText;
+    private Forms.EstimateInput estimateInput;
     private final Button[] priorityChips = new Button[4];
 
     @Override
@@ -43,12 +46,13 @@ public class TaskFormActivity extends ThemedActivity {
         plannedDate = task.plannedDate;
         priority = task.priority;
         dueAt = task.dueAt;
+        categoryId = task.categoryId;
         buildUi();
     }
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "やることを編集"));
+        root.addView(Ui.titleWithBack(this, "やることを編集"));
 
         LinearLayout card = Ui.card(this, root);
 
@@ -95,6 +99,20 @@ public class TaskFormActivity extends ThemedActivity {
         card.addView(priorityRow);
         updatePriorityChips();
 
+        LinearLayout categoryRow = Ui.horizontal(this);
+        categoryText = new TextView(this);
+        categoryText.setTextSize(15);
+        categoryText.setTextColor(Ui.TEXT);
+        updateCategoryText();
+        categoryRow.addView(categoryText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button categoryChange = Ui.button(this, "変更");
+        categoryChange.setOnClickListener(v -> CategoryActivity.showPicker(this, db, categoryId, newId -> {
+            categoryId = newId;
+            updateCategoryText();
+        }));
+        categoryRow.addView(categoryChange, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        card.addView(categoryRow);
+
         LinearLayout dueRow = Ui.horizontal(this);
         dueText = new TextView(this);
         dueText.setTextSize(15);
@@ -115,10 +133,19 @@ public class TaskFormActivity extends ThemedActivity {
         dueRow.addView(dueClear, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         card.addView(dueRow);
 
+        estimateInput = Forms.estimate(this, "見積: ", task.estimateMinutes);
+        card.addView(estimateInput.row);
+
         Ui.space(this, root, 6);
         Button save = Ui.primaryButton(this, "保存");
         save.setOnClickListener(v -> onSave());
         root.addView(save);
+
+        Ui.space(this, root, 16);
+        Button delete = Ui.button(this, "🗑 このタスクを削除");
+        delete.setTextColor(Ui.DANGER);
+        delete.setOnClickListener(v -> confirmDelete());
+        root.addView(delete);
     }
 
     private void updatePlannedDateText() {
@@ -129,6 +156,11 @@ public class TaskFormActivity extends ThemedActivity {
         for (int i = 0; i < priorityChips.length; i++) {
             Ui.setChipSelected(priorityChips[i], priority == i);
         }
+    }
+
+    private void updateCategoryText() {
+        Models.Category category = categoryId > 0 ? db.getCategory(categoryId) : null;
+        categoryText.setText("カテゴリ: " + (category == null ? "なし" : category.name));
     }
 
     private void updateDueText() {
@@ -170,9 +202,24 @@ public class TaskFormActivity extends ThemedActivity {
             Toast.makeText(this, "タスク名を入力してください", Toast.LENGTH_SHORT).show();
             return;
         }
-        db.updateDoTask(task.id, title, noteEdit.getText().toString(), plannedDate, priority, dueAt);
+        db.updateDoTask(task.id, title, noteEdit.getText().toString(), plannedDate, priority, dueAt,
+                categoryId, estimateInput.totalMinutes());
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();
+    }
+
+    private void confirmDelete() {
+        Ui.dialog(this)
+                .setTitle("やることを削除しますか？")
+                .setMessage("「" + task.title + "」を削除します。")
+                .setPositiveButton("削除", (dialog, which) -> {
+                    db.deleteDoTask(task.id);
+                    AutoSync.run(this);
+                    Toast.makeText(this, "削除しました", Toast.LENGTH_SHORT).show();
+                    finish();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
     }
 }

@@ -4,10 +4,14 @@ import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.time.LocalDate;
@@ -27,6 +31,9 @@ public class StatsActivity extends ThemedActivity {
     private Button monthChip;
     private Button dateChip;
     private GestureDetector gestureDetector;
+    private boolean completedDesc = true;
+    private boolean recordsDesc = true;
+    private boolean cyclesDesc = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +47,7 @@ public class StatsActivity extends ThemedActivity {
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > Ui.dp(StatsActivity.this, 60)) {
-                    swipeMode(dx < 0 ? 1 : -1);
+                    shiftPeriod(dx < 0 ? 1 : -1);
                     return true;
                 }
                 return false;
@@ -56,35 +63,65 @@ public class StatsActivity extends ThemedActivity {
         refresh();
     }
 
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        gestureDetector.onTouchEvent(ev);
-        return super.dispatchTouchEvent(ev);
+    /** 表示期間を前後に移動する（日=±1日、週=±7日、月=±1か月）。 */
+    private void shiftPeriod(int delta) {
+        LocalDate base = DateTools.parseOrToday(selectedDate);
+        if ("day".equals(mode)) base = base.plusDays(delta);
+        else if ("week".equals(mode)) base = base.plusDays(7L * delta);
+        else base = base.plusMonths(delta);
+        selectedDate = base.format(DateTools.DATE);
+        animatePeriodChange(delta);
     }
 
-    private void swipeMode(int delta) {
-        String[] order = {"day", "week", "month"};
-        int index = indexOf(order, mode);
-        int next = Math.max(0, Math.min(order.length - 1, index + delta));
-        if (!order[next].equals(mode)) {
-            mode = order[next];
+    /** 現在のグラフを横へ流しながらフェードアウトし、更新後に逆側からフェードインさせる。 */
+    private void animatePeriodChange(int delta) {
+        float shift = Ui.dp(this, 40);
+        chart.animate().alpha(0f).translationX(-delta * shift).setDuration(120).withEndAction(() -> {
             refresh();
-        }
+            chart.setTranslationX(delta * shift);
+            chart.animate().alpha(1f).translationX(0f).setDuration(120).start();
+        }).start();
     }
 
-    private int indexOf(String[] array, String value) {
-        for (int i = 0; i < array.length; i++) {
-            if (array[i].equals(value)) return i;
-        }
-        return 0;
+    /** 見出し（左）と時間ソート切替チップ（右）を横に並べた行。 */
+    private LinearLayout sectionWithSort(String title, boolean desc, Runnable toggle) {
+        LinearLayout header = Ui.horizontal(this);
+        header.addView(Ui.section(this, title), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button chip = Ui.chip(this, desc ? "時間 ↓" : "時間 ↑");
+        chip.setOnClickListener(v -> {
+            toggle.run();
+            refresh();
+        });
+        header.addView(chip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return header;
     }
 
     private void buildUi() {
-        LinearLayout root = Ui.screen(this);
+        FrameLayout rootFrame = new FrameLayout(this);
+        rootFrame.setBackgroundColor(Ui.BG);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout content = Ui.vertical(this);
+        int pad = Ui.dp(this, 16);
+        content.setPadding(pad, Ui.dp(this, 12), pad, Ui.dp(this, 40));
+        scroll.addView(content);
+        rootFrame.addView(scroll, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // フロートバー（チップ行の入れ物）
+        LinearLayout bar = Ui.horizontal(this);
+        bar.setBackgroundColor(Ui.BG);
+        bar.setPadding(pad, 0, pad, Ui.dp(this, 6));
+        rootFrame.addView(bar, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        setContentView(rootFrame);
+        Ui.applyWindowChrome(this);
+        Ui.applyInsets(rootFrame);
 
-        root.addView(Ui.title(this, "集計"));
+        LinearLayout titleRow = Ui.titleWithBack(this, "集計");
+        content.addView(titleRow);
+        View barSpacer = new View(this);
+        content.addView(barSpacer, new LinearLayout.LayoutParams(1, Ui.dp(this, 48)));
 
-        LinearLayout chips = Ui.horizontal(this);
         dayChip = Ui.chip(this, "今日");
         weekChip = Ui.chip(this, "今週");
         monthChip = Ui.chip(this, "今月");
@@ -94,20 +131,54 @@ public class StatsActivity extends ThemedActivity {
         weekChip.setOnClickListener(v -> { mode = "week"; refresh(); });
         monthChip.setOnClickListener(v -> { mode = "month"; refresh(); });
         dateChip.setOnClickListener(v -> openDatePicker());
-        addChip(chips, dayChip, true);
-        addChip(chips, weekChip, true);
-        addChip(chips, monthChip, true);
-        chips.addView(dateChip, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.addView(chips);
-        Ui.space(this, root, 10);
+        addChip(bar, dayChip, true);
+        addChip(bar, weekChip, true);
+        addChip(bar, monthChip, true);
+        bar.addView(dateChip, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        LinearLayout chartCard = Ui.card(this, root);
+        // チップバーはタイトルがスクロールで隠れるまで追従し、その後は上端に固定する
+        Runnable positionBar = () -> bar.setTranslationY(Math.max(0, titleRow.getBottom() - scroll.getScrollY()));
+        scroll.setOnScrollChangeListener((v, x, y, ox, oy) -> positionBar.run());
+        bar.post(() -> {
+            // スペーサ高さを実測に合わせ、初期位置を設定
+            barSpacer.getLayoutParams().height = Math.max(bar.getHeight(), Ui.dp(this, 48));
+            barSpacer.requestLayout();
+            positionBar.run();
+        });
+
+        LinearLayout chartCard = Ui.card(this, content);
         chart = new BarChartView(this);
-        chartCard.addView(chart, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
+        // グラフ上の左右スワイプで前後の期間へ移動する。端の ‹ › は操作できることを示す目印。
+        FrameLayout chartFrame = new FrameLayout(this);
+        chartFrame.addView(chart, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams leftMarkLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        leftMarkLp.leftMargin = Ui.dp(this, 4);
+        chartFrame.addView(swipeMark("‹"), leftMarkLp);
+        FrameLayout.LayoutParams rightMarkLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END | Gravity.CENTER_VERTICAL);
+        rightMarkLp.rightMargin = Ui.dp(this, 4);
+        chartFrame.addView(swipeMark("›"), rightMarkLp);
+        chartFrame.setOnTouchListener((v, e) -> {
+            gestureDetector.onTouchEvent(e);
+            return true;
+        });
+        chartCard.addView(chartFrame, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
         chartCard.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。"));
 
         list = Ui.vertical(this);
-        root.addView(list);
+        content.addView(list);
+    }
+
+    private TextView swipeMark(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(18);
+        tv.setTextColor(Ui.HINT);
+        return tv;
     }
 
     private void addChip(LinearLayout parent, Button chip, boolean withMargin) {
@@ -219,10 +290,21 @@ public class StatsActivity extends ThemedActivity {
             chart.setTotals(chartTotals, chartLabels);
         }
 
-        List<Models.Record> records = db.getRecords(from, to);
-        List<Models.Cycle> cycles = db.getCycles(from, to);
-        List<Models.CompletedTask> completedTasks = db.getCompletedTaskTotals(from, to);
+        List<Models.Record> records = new ArrayList<>(db.getRecords(from, to));
+        List<Models.Cycle> cycles = new ArrayList<>(db.getCycles(from, to));
+        List<Models.CompletedTask> completedTasks = new ArrayList<>(db.getCompletedTaskTotals(from, to));
         list.removeAllViews();
+
+        // 日付ブロックの昇降順ソート（同日内は元の順序を保持。List.sort は安定ソート）
+        completedTasks.sort((a, b) -> completedDesc
+                ? b.completedDate.compareTo(a.completedDate)
+                : a.completedDate.compareTo(b.completedDate));
+        records.sort((a, b) -> recordsDesc
+                ? b.actualDate.compareTo(a.actualDate)
+                : a.actualDate.compareTo(b.actualDate));
+        cycles.sort((a, b) -> cyclesDesc
+                ? b.cycleDate.compareTo(a.cycleDate)
+                : a.cycleDate.compareTo(b.cycleDate));
 
         // 合計サマリー
         list.addView(Ui.section(this, label + "の合計"));
@@ -246,8 +328,17 @@ public class StatsActivity extends ThemedActivity {
             summaryCard.addView(Ui.note(this, "📱 計測中（未保存）の " + DateTools.formatMinutes(liveExtra) + " を含みます。一日の終了時に自動保存されます。"));
         }
 
+        // カテゴリ別（やること）
+        list.addView(Ui.section(this, "カテゴリ別（やること）"));
+        LinearLayout categoryCard = Ui.card(this, list);
+        CategoryBarChartView categoryChart = new CategoryBarChartView(this);
+        categoryChart.setData(db.getCategories(), db.getCategoryTotals(from, to));
+        categoryCard.addView(categoryChart, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 200)));
+        categoryCard.addView(Ui.note(this, "カテゴリ未設定のタスクは「その他」に集計されます。"));
+
         // 完了したタスク
-        list.addView(Ui.section(this, "完了したタスク"));
+        list.addView(sectionWithSort("完了したタスク", completedDesc, () -> completedDesc = !completedDesc));
         LinearLayout completedCard = Ui.card(this, list);
         if (completedTasks.isEmpty()) {
             completedCard.addView(Ui.note(this, "この期間に完了したタスクはありません。"));
@@ -271,7 +362,7 @@ public class StatsActivity extends ThemedActivity {
         }
 
         // 実績一覧
-        list.addView(Ui.section(this, label + "の記録"));
+        list.addView(sectionWithSort(label + "の記録", recordsDesc, () -> recordsDesc = !recordsDesc));
         LinearLayout recordsCard = Ui.card(this, list);
         if (records.isEmpty()) {
             recordsCard.addView(Ui.note(this, "この期間の実績記録はまだありません。"));
@@ -316,7 +407,7 @@ public class StatsActivity extends ThemedActivity {
         }
 
         // サイクル履歴
-        list.addView(Ui.section(this, "サイクル履歴"));
+        list.addView(sectionWithSort("サイクル履歴", cyclesDesc, () -> cyclesDesc = !cyclesDesc));
         LinearLayout cyclesCard = Ui.card(this, list);
         if (cycles.isEmpty()) {
             cyclesCard.addView(Ui.note(this, "この期間のサイクル記録はまだありません。"));

@@ -1,11 +1,8 @@
 package com.habitgate.app;
 
-import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,7 +16,6 @@ public class ReduceEntryActivity extends ThemedActivity {
     private HabitDb db;
     private Models.ReduceItem item;
     private String entryDate;
-    private String memo = "";
     private String hoursText = "";
     private String minutesText = "";
     private boolean gaugeTouched = false;
@@ -30,7 +26,7 @@ public class ReduceEntryActivity extends ThemedActivity {
     private EditText minutesEdit;
     private EditText gaugeHoursEdit;
     private EditText gaugeMinutesEdit;
-    private TextView memoPreview;
+    private MemoField recordMemo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,8 +44,9 @@ public class ReduceEntryActivity extends ThemedActivity {
     }
 
     private void buildUi() {
+        String prevMemo = recordMemo == null ? "" : recordMemo.get();
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "実績入力"));
+        root.addView(Ui.titleWithBack(this, "実績入力"));
 
         // 項目情報
         LinearLayout infoCard = Ui.card(this, root);
@@ -103,51 +100,28 @@ public class ReduceEntryActivity extends ThemedActivity {
             }
             inputCard.addView(measuredText);
 
-            LinearLayout duration = durationRow("手動追加: ");
-            hoursEdit = (EditText) duration.getChildAt(1);
-            minutesEdit = (EditText) duration.getChildAt(3);
-            inputCard.addView(duration);
+            Forms.DurationInput duration = Forms.duration(this, "手動追加: ");
+            hoursEdit = duration.hours;
+            minutesEdit = duration.minutes;
+            inputCard.addView(duration.row);
             if (!hoursText.isEmpty()) hoursEdit.setText(hoursText);
             if (!minutesText.isEmpty()) minutesEdit.setText(minutesText);
         } else {
-            LinearLayout duration = durationRow("時間: ");
-            hoursEdit = (EditText) duration.getChildAt(1);
-            minutesEdit = (EditText) duration.getChildAt(3);
-            inputCard.addView(duration);
+            Forms.DurationInput duration = Forms.duration(this, "時間: ");
+            hoursEdit = duration.hours;
+            minutesEdit = duration.minutes;
+            inputCard.addView(duration.row);
             if (!hoursText.isEmpty()) hoursEdit.setText(hoursText);
             if (!minutesText.isEmpty()) minutesEdit.setText(minutesText);
         }
 
-        LinearLayout memoRow = Ui.horizontal(this);
-        memoPreview = new TextView(this);
-        memoPreview.setMaxLines(2);
-        memoPreview.setEllipsize(TextUtils.TruncateAt.END);
-        memoPreview.setTextSize(14);
-        updateMemoPreview();
-        memoPreview.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoPreview, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button memoButton = Ui.iconButton(this, "📝");
-        memoButton.setContentDescription("実績メモを編集");
-        memoButton.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        inputCard.addView(memoRow);
+        recordMemo = new MemoField(this, "実績メモ", "実績メモ（任意）", "", Ui.TEXT, prevMemo);
+        inputCard.addView(recordMemo.view());
 
-        LinearLayout gaugeRow = Ui.horizontal(this);
-        gaugeRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView gaugeLabel = new TextView(this);
-        gaugeLabel.setText("グラフ上限: ");
-        gaugeRow.addView(gaugeLabel);
-        gaugeHoursEdit = Ui.numberEdit(this, "0", 99);
-        gaugeRow.addView(gaugeHoursEdit);
-        TextView gaugeHourSuffix = new TextView(this);
-        gaugeHourSuffix.setText(" 時間 ");
-        gaugeRow.addView(gaugeHourSuffix);
-        gaugeMinutesEdit = Ui.numberEdit(this, "0", 59);
-        gaugeRow.addView(gaugeMinutesEdit);
-        TextView gaugeMinuteSuffix = new TextView(this);
-        gaugeMinuteSuffix.setText(" 分");
-        gaugeRow.addView(gaugeMinuteSuffix);
-        inputCard.addView(gaugeRow);
+        Forms.DurationInput gauge = Forms.duration(this, "グラフ上限: ");
+        gaugeHoursEdit = gauge.hours;
+        gaugeMinutesEdit = gauge.minutes;
+        inputCard.addView(gauge.row);
 
         if (gaugeTouched) {
             if (!gaugeHoursText.isEmpty()) gaugeHoursEdit.setText(gaugeHoursText);
@@ -161,53 +135,6 @@ public class ReduceEntryActivity extends ThemedActivity {
         Button save = Ui.primaryButton(this, "保存");
         save.setOnClickListener(v -> onSave());
         root.addView(save);
-    }
-
-    private LinearLayout durationRow(String labelText) {
-        LinearLayout row = Ui.horizontal(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView label = new TextView(this);
-        label.setText(labelText);
-        row.addView(label);
-        EditText h = Ui.numberEdit(this, "0", 99);
-        row.addView(h);
-        TextView colon = new TextView(this);
-        colon.setText(" 時間 ");
-        row.addView(colon);
-        EditText m = Ui.numberEdit(this, "0", 59);
-        row.addView(m);
-        TextView suffix = new TextView(this);
-        suffix.setText(" 分");
-        row.addView(suffix);
-        return row;
-    }
-
-    private void updateMemoPreview() {
-        if (memo.isEmpty()) {
-            memoPreview.setText("実績メモ（任意）");
-            memoPreview.setTextColor(Ui.HINT);
-        } else {
-            memoPreview.setText(memo);
-            memoPreview.setTextColor(Ui.TEXT);
-        }
-    }
-
-    private void openMemoDialog() {
-        EditText input = Ui.multilineEdit(this, "実績メモ（任意）");
-        input.setText(memo);
-        int pad = Ui.dp(this, 18);
-        LinearLayout wrapper = Ui.vertical(this);
-        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
-        wrapper.addView(input);
-        Ui.dialog(this)
-                .setTitle("実績メモ")
-                .setView(wrapper)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    memo = input.getText().toString().trim();
-                    updateMemoPreview();
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
     }
 
     private void stashInputs() {
@@ -247,27 +174,19 @@ public class ReduceEntryActivity extends ThemedActivity {
         if (item.hasLinkedApp()) {
             // 計測値は自動計測（一日の終了時）で保存されるため、ここでは手動追加分のみを保存する。
             int manualMinutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-            if (manualMinutes > 0 || !memo.isEmpty()) {
+            if (manualMinutes > 0 || !recordMemo.get().isEmpty()) {
                 db.addRecord(HabitDb.CATEGORY_REDUCE, item.title,
-                        mergeNotes(item.note, memo.isEmpty() ? "手動追加" : memo), manualMinutes, entryDate);
+                        Forms.mergeNotes(item.note, recordMemo.get().isEmpty() ? "手動追加" : recordMemo.get()), manualMinutes, entryDate);
             }
         } else {
             int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-            if (minutes > 0 || !memo.isEmpty()) {
-                db.addRecord(HabitDb.CATEGORY_REDUCE, item.title, mergeNotes(item.note, memo), minutes, entryDate);
+            if (minutes > 0 || !recordMemo.get().isEmpty()) {
+                db.addRecord(HabitDb.CATEGORY_REDUCE, item.title, Forms.mergeNotes(item.note, recordMemo.get()), minutes, entryDate);
             }
         }
 
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();
-    }
-
-    private String mergeNotes(String itemNote, String actualNote) {
-        String left = itemNote == null ? "" : itemNote.trim();
-        String right = actualNote == null ? "" : actualNote.trim();
-        if (left.isEmpty()) return right;
-        if (right.isEmpty()) return left;
-        return "項目メモ: " + left + " / 実績メモ: " + right;
     }
 }

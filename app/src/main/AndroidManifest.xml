@@ -33,6 +33,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".CategoryActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".CheckInActivity"
             android:exported="false"
             android:showWhenLocked="true"

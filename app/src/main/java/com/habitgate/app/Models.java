@@ -12,14 +12,32 @@ public final class Models {
         public final int priority;
         // 期限（epoch ミリ秒）。0=期限なし
         public final long dueAt;
+        // カテゴリID。0=なし
+        public final long categoryId;
+        // 見積もり時間（分）。0=なし
+        public final int estimateMinutes;
 
-        public Task(long id, String title, String plannedDate, String note, int priority, long dueAt) {
+        public Task(long id, String title, String plannedDate, String note, int priority, long dueAt, long categoryId, int estimateMinutes) {
             this.id = id;
             this.title = title;
             this.plannedDate = plannedDate;
             this.note = note == null ? "" : note;
             this.priority = priority;
             this.dueAt = dueAt;
+            this.categoryId = categoryId;
+            this.estimateMinutes = estimateMinutes;
+        }
+    }
+
+    public static class Category {
+        public final long id;
+        public final String name;
+        public final int color;
+
+        public Category(long id, String name, int color) {
+            this.id = id;
+            this.name = name == null ? "" : name;
+            this.color = color;
         }
     }
 
@@ -54,8 +72,9 @@ public final class Models {
         public final String actualDate;
         public final long createdAt;
         public final boolean synced;
+        public final long categoryId;
 
-        public Record(long id, String category, String title, String note, int durationMinutes, String actualDate, long createdAt, boolean synced) {
+        public Record(long id, String category, String title, String note, int durationMinutes, String actualDate, long createdAt, boolean synced, long categoryId) {
             this.id = id;
             this.category = category;
             this.title = title;
@@ -64,6 +83,7 @@ public final class Models {
             this.actualDate = actualDate;
             this.createdAt = createdAt;
             this.synced = synced;
+            this.categoryId = categoryId;
         }
     }
 

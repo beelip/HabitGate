@@ -1,11 +1,8 @@
 package com.habitgate.app;
 
-import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,13 +16,12 @@ public class RecordEditActivity extends ThemedActivity {
     private HabitDb db;
     private Models.Record record;
     private String entryDate;
-    private String memo = "";
     private String hoursText = "";
     private String minutesText = "";
 
     private EditText hoursEdit;
     private EditText minutesEdit;
-    private TextView memoPreview;
+    private MemoField recordMemo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,13 +35,13 @@ public class RecordEditActivity extends ThemedActivity {
             return;
         }
         entryDate = record.actualDate;
-        memo = record.note;
         buildUi();
     }
 
     private void buildUi() {
+        String prevMemo = recordMemo == null ? record.note : recordMemo.get();
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "記録の編集"));
+        root.addView(Ui.titleWithBack(this, "記録の編集"));
 
         // 記録情報
         LinearLayout infoCard = Ui.card(this, root);
@@ -77,9 +73,9 @@ public class RecordEditActivity extends ThemedActivity {
         dateRow.addView(changeDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         inputCard.addView(dateRow);
 
-        LinearLayout duration = durationRow();
-        hoursEdit = (EditText) duration.getChildAt(1);
-        minutesEdit = (EditText) duration.getChildAt(3);
+        Forms.DurationInput duration = Forms.duration(this, "時間: ");
+        hoursEdit = duration.hours;
+        minutesEdit = duration.minutes;
         if (!hoursText.isEmpty()) {
             hoursEdit.setText(hoursText);
         } else {
@@ -90,21 +86,10 @@ public class RecordEditActivity extends ThemedActivity {
         } else {
             minutesEdit.setText(String.valueOf(record.durationMinutes % 60));
         }
-        inputCard.addView(duration);
+        inputCard.addView(duration.row);
 
-        LinearLayout memoRow = Ui.horizontal(this);
-        memoPreview = new TextView(this);
-        memoPreview.setMaxLines(2);
-        memoPreview.setEllipsize(TextUtils.TruncateAt.END);
-        memoPreview.setTextSize(14);
-        updateMemoPreview();
-        memoPreview.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoPreview, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button memoButton = Ui.iconButton(this, "📝");
-        memoButton.setContentDescription("実績メモを編集");
-        memoButton.setOnClickListener(v -> openMemoDialog());
-        memoRow.addView(memoButton, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-        inputCard.addView(memoRow);
+        recordMemo = new MemoField(this, "実績メモ", "実績メモ（任意）", "", Ui.TEXT, prevMemo);
+        inputCard.addView(recordMemo.view());
 
         Ui.space(this, root, 6);
         Button save = Ui.primaryButton(this, "保存");
@@ -116,53 +101,6 @@ public class RecordEditActivity extends ThemedActivity {
         delete.setTextColor(Ui.DANGER);
         delete.setOnClickListener(v -> confirmDelete());
         root.addView(delete);
-    }
-
-    private LinearLayout durationRow() {
-        LinearLayout row = Ui.horizontal(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView label = new TextView(this);
-        label.setText("時間: ");
-        row.addView(label);
-        EditText h = Ui.numberEdit(this, "0", 99);
-        row.addView(h);
-        TextView colon = new TextView(this);
-        colon.setText(" 時間 ");
-        row.addView(colon);
-        EditText m = Ui.numberEdit(this, "0", 59);
-        row.addView(m);
-        TextView suffix = new TextView(this);
-        suffix.setText(" 分");
-        row.addView(suffix);
-        return row;
-    }
-
-    private void updateMemoPreview() {
-        if (memo.isEmpty()) {
-            memoPreview.setText("実績メモ（任意）");
-            memoPreview.setTextColor(Ui.HINT);
-        } else {
-            memoPreview.setText(memo);
-            memoPreview.setTextColor(Ui.TEXT);
-        }
-    }
-
-    private void openMemoDialog() {
-        EditText input = Ui.multilineEdit(this, "実績メモ（任意）");
-        input.setText(memo);
-        int pad = Ui.dp(this, 18);
-        LinearLayout wrapper = Ui.vertical(this);
-        wrapper.setPadding(pad, Ui.dp(this, 6), pad, 0);
-        wrapper.addView(input);
-        Ui.dialog(this)
-                .setTitle("実績メモ")
-                .setView(wrapper)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    memo = input.getText().toString().trim();
-                    updateMemoPreview();
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
     }
 
     private void openDatePicker() {
@@ -177,7 +115,7 @@ public class RecordEditActivity extends ThemedActivity {
 
     private void onSave() {
         int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-        db.updateRecord(record.id, minutes, memo, entryDate);
+        db.updateRecord(record.id, minutes, recordMemo.get(), entryDate);
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();

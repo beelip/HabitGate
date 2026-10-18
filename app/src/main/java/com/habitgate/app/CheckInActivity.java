@@ -36,7 +36,7 @@ public class CheckInActivity extends ThemedActivity {
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "今日は何をした？"));
+        root.addView(Ui.titleWithBack(this, "今日は何をした？"));
 
         // 対象日カード
         LinearLayout dateCard = Ui.card(this, root);

@@ -36,6 +36,8 @@ public class SettingsActivity extends ThemedActivity {
     private TextView sheetsInfo;
     private TextView usageInfo;
     private TextView themeInfo;
+    private TextView holidayInfo;
+    private Button syncButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +54,7 @@ public class SettingsActivity extends ThemedActivity {
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
 
-        root.addView(Ui.title(this, "設定"));
+        root.addView(Ui.titleWithBack(this, "設定"));
 
         root.addView(Ui.section(this, "デザイン"));
         LinearLayout designCard = Ui.card(this, root);
@@ -84,6 +86,35 @@ public class SettingsActivity extends ThemedActivity {
         });
         designCard.addView(followSystemCheck);
         designCard.addView(Ui.note(this, "テーマは全画面に反映されます。「端末のダークモードと連携する」を有効にすると、端末側の設定に合わせて自動で切り替わります。"));
+
+        root.addView(Ui.section(this, "カテゴリ"));
+        LinearLayout categoryCard = Ui.card(this, root);
+        Button categoryButton = Ui.button(this, "カテゴリを編集");
+        categoryButton.setOnClickListener(v -> startActivity(new Intent(this, CategoryActivity.class)));
+        categoryCard.addView(categoryButton);
+        categoryCard.addView(Ui.note(this, "タスクに設定できるカテゴリを追加・削除できます。"));
+
+        root.addView(Ui.section(this, "祝日"));
+        LinearLayout holidayCard = Ui.card(this, root);
+        holidayInfo = Ui.body(this, "");
+        holidayCard.addView(holidayInfo);
+        Ui.space(this, holidayCard, 8);
+        syncButton = Ui.button(this, "祝日を同期");
+        syncButton.setOnClickListener(v -> {
+            syncButton.setEnabled(false);
+            Toast.makeText(this, "祝日データを取得しています…", Toast.LENGTH_SHORT).show();
+            HolidaySync.sync(this, (ok, count, message) -> runOnUiThread(() -> {
+                syncButton.setEnabled(true);
+                if (ok) {
+                    Toast.makeText(this, "祝日データを更新しました（" + count + "件）", Toast.LENGTH_SHORT).show();
+                    refreshStatus();
+                } else {
+                    Toast.makeText(this, "同期に失敗しました: " + message, Toast.LENGTH_LONG).show();
+                }
+            }));
+        });
+        holidayCard.addView(syncButton);
+        holidayCard.addView(Ui.note(this, "内閣府が公開する祝日データ（1955年〜翌年分）を取得します。同期済みの年はそのデータで、範囲外の年は内蔵の計算で判定します。"));
 
         root.addView(Ui.section(this, "通知"));
         LinearLayout notifyCard = Ui.card(this, root);
@@ -154,6 +185,15 @@ public class SettingsActivity extends ThemedActivity {
         if (backupInfo == null) return;
         if (themeInfo != null) {
             themeInfo.setText("テーマ: " + Themes.current(this).label);
+        }
+        if (holidayInfo != null) {
+            int holidayCount = ReminderScheduler.prefs(this).getInt("holiday_count", 0);
+            if (holidayCount <= 0) {
+                holidayInfo.setText("祝日データ: 未同期（内蔵の計算で判定します）");
+            } else {
+                long lastSync = ReminderScheduler.prefs(this).getLong("holiday_last_sync", 0);
+                holidayInfo.setText("同期済み: " + holidayCount + "件 / 最終同期: " + DateTools.formatDateTime(lastSync));
+            }
         }
         backupInfo.setText("自動CSV更新先: " + CsvBackupManager.backupDirectoryLabel(this) + "\nファイル名: " + CsvBackupManager.BACKUP_FILE_NAME);
         String url = ReminderScheduler.webhookUrl(this);
