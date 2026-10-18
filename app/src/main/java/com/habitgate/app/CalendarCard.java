@@ -30,7 +30,8 @@ public final class CalendarCard {
     /** カレンダーカード全体（ヘッダ+曜日行+6週グリッド）を構築して返す。 */
     public static LinearLayout build(Activity activity, HabitDb db, String monthFirstDayIso,
                                      OnMonthChanged onMonthChanged) {
-        LinearLayout root = Ui.vertical(activity);
+        SwipeLayout root = new SwipeLayout(activity);
+        root.setOnSwipe(dir -> onMonthChanged.onChanged(shiftMonth(monthFirstDayIso, dir)));
         LocalDate first = DateTools.parseOrToday(monthFirstDayIso).withDayOfMonth(1);
         String cycleDate = db.getCurrentCycle().cycleDate;
 
@@ -38,7 +39,7 @@ public final class CalendarCard {
         LinearLayout header = Ui.horizontal(activity);
         Button prev = Ui.iconButton(activity, "‹");
         prev.setContentDescription("前の月");
-        prev.setOnClickListener(v -> onMonthChanged.onChanged(first.minusMonths(1).format(DateTools.DATE)));
+        prev.setOnClickListener(v -> onMonthChanged.onChanged(shiftMonth(monthFirstDayIso, -1)));
         header.addView(prev, new LinearLayout.LayoutParams(Ui.dp(activity, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         TextView monthLabel = new TextView(activity);
         monthLabel.setText(first.getYear() + "年" + first.getMonthValue() + "月");
@@ -49,7 +50,7 @@ public final class CalendarCard {
         header.addView(monthLabel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button next = Ui.iconButton(activity, "›");
         next.setContentDescription("次の月");
-        next.setOnClickListener(v -> onMonthChanged.onChanged(first.plusMonths(1).format(DateTools.DATE)));
+        next.setOnClickListener(v -> onMonthChanged.onChanged(shiftMonth(monthFirstDayIso, 1)));
         header.addView(next, new LinearLayout.LayoutParams(Ui.dp(activity, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(header);
 
@@ -93,6 +94,12 @@ public final class CalendarCard {
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
         return root;
+    }
+
+    /** 指定月の月初を delta か月ずらした月初の ISO 文字列を返す。 */
+    private static String shiftMonth(String monthFirstDayIso, int delta) {
+        return DateTools.parseOrToday(monthFirstDayIso).withDayOfMonth(1)
+                .plusMonths(delta).format(DateTools.DATE);
     }
 
     private static LinearLayout buildCell(Activity activity, HabitDb db, LocalDate date, LocalDate monthFirst,

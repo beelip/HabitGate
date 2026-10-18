@@ -93,7 +93,8 @@ public class MainActivity extends ThemedActivity {
         calendarCollapsed = ReminderScheduler.prefs(this).getBoolean("calendar_collapsed", false);
         LinearLayout calendarHeaderRow = Ui.horizontal(this);
         calendarHeaderRow.addView(Ui.section(this, "カレンダー"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        calendarToggle = Ui.chip(this, calendarCollapsed ? "▸" : "▾");
+        calendarToggle = Ui.chip(this, calendarCollapsed ? "▶" : "▼");
+        calendarToggle.setTextSize(18);
         calendarToggle.setContentDescription("カレンダーの表示切り替え");
         calendarToggle.setOnClickListener(v -> {
             calendarCollapsed = !calendarCollapsed;
@@ -236,7 +237,7 @@ public class MainActivity extends ThemedActivity {
 
     private void rebuildCalendar() {
         if (calendarContainer == null) return;
-        if (calendarToggle != null) calendarToggle.setText(calendarCollapsed ? "▸" : "▾");
+        if (calendarToggle != null) calendarToggle.setText(calendarCollapsed ? "▶" : "▼");
         calendarContainer.removeAllViews();
         if (calendarCollapsed) return;
         LinearLayout card = Ui.card(this, calendarContainer);
