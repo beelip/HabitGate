@@ -251,6 +251,16 @@ public final class Ui {
         et.setSingleLine(false);
         et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         et.setMaxLines(4);
+        et.setVerticalScrollBarEnabled(true);
+        // 4行を超えたら欄内でスクロールできるよう、タッチ中は親の ScrollView に奪わせない
+        et.setOnTouchListener((v, event) -> {
+            v.getParent().requestDisallowInterceptTouchEvent(true);
+            int action = event.getActionMasked();
+            if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) {
+                v.getParent().requestDisallowInterceptTouchEvent(false);
+            }
+            return false;
+        });
         style(et);
         return et;
     }
