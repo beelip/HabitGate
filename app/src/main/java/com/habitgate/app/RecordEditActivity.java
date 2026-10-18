@@ -22,6 +22,8 @@ public class RecordEditActivity extends ThemedActivity {
     private EditText hoursEdit;
     private EditText minutesEdit;
     private MemoField recordMemo;
+    private long categoryId;
+    private TextView categoryText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,6 +37,7 @@ public class RecordEditActivity extends ThemedActivity {
             return;
         }
         entryDate = record.actualDate;
+        categoryId = record.categoryId;
         buildUi();
     }
 
@@ -45,11 +48,11 @@ public class RecordEditActivity extends ThemedActivity {
 
         // 記録情報
         LinearLayout infoCard = Ui.card(this, root);
-        TextView categoryText = new TextView(this);
-        categoryText.setText(HabitDb.CATEGORY_DO.equals(record.category) ? "やること" : "減らすこと");
-        categoryText.setTextSize(13);
-        categoryText.setTextColor(Ui.MUTED);
-        infoCard.addView(categoryText);
+        TextView kindText = new TextView(this);
+        kindText.setText(HabitDb.CATEGORY_DO.equals(record.category) ? "やること" : "減らすこと");
+        kindText.setTextSize(13);
+        kindText.setTextColor(Ui.MUTED);
+        infoCard.addView(kindText);
         TextView titleText = new TextView(this);
         titleText.setText(record.title);
         titleText.setTextSize(17);
@@ -72,6 +75,22 @@ public class RecordEditActivity extends ThemedActivity {
         changeDate.setOnClickListener(v -> openDatePicker());
         dateRow.addView(changeDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         inputCard.addView(dateRow);
+
+        if (HabitDb.CATEGORY_DO.equals(record.category)) {
+            LinearLayout categoryRow = Ui.horizontal(this);
+            categoryText = new TextView(this);
+            categoryText.setTextSize(15);
+            categoryText.setTextColor(Ui.TEXT);
+            updateCategoryText();
+            categoryRow.addView(categoryText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+            Button categoryChange = Ui.button(this, "変更");
+            categoryChange.setOnClickListener(v -> CategoryActivity.showPicker(this, db, categoryId, picked -> {
+                categoryId = picked;
+                updateCategoryText();
+            }));
+            categoryRow.addView(categoryChange, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            inputCard.addView(categoryRow);
+        }
 
         Forms.DurationInput duration = Forms.duration(this, "時間: ");
         hoursEdit = duration.hours;
@@ -103,6 +122,11 @@ public class RecordEditActivity extends ThemedActivity {
         root.addView(delete);
     }
 
+    private void updateCategoryText() {
+        Models.Category category = categoryId > 0 ? db.getCategory(categoryId) : null;
+        categoryText.setText("カテゴリ: " + (category == null ? "なし" : category.name));
+    }
+
     private void openDatePicker() {
         hoursText = hoursEdit.getText().toString();
         minutesText = minutesEdit.getText().toString();
@@ -115,7 +139,7 @@ public class RecordEditActivity extends ThemedActivity {
 
     private void onSave() {
         int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-        db.updateRecord(record.id, minutes, recordMemo.get(), entryDate);
+        db.updateRecord(record.id, minutes, recordMemo.get(), entryDate, categoryId);
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();

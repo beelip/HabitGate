@@ -567,11 +567,12 @@ public class HabitDb extends SQLiteOpenHelper {
         return null;
     }
 
-    public void updateRecord(long id, int durationMinutes, String note, String actualDate) {
+    public void updateRecord(long id, int durationMinutes, String note, String actualDate, long categoryId) {
         ContentValues v = new ContentValues();
         v.put("duration_minutes", Math.max(0, durationMinutes));
         v.put("note", clean(note));
         v.put("actual_date", actualDate);
+        v.put("category_id", categoryId);
         v.put("synced", 0);
         getWritableDatabase().update("records", v, "id=?", new String[]{String.valueOf(id)});
     }
