@@ -64,3 +64,21 @@ jobs:
             git commit -m "ビルド済み APK を更新 [skip ci]"
             git push origin HEAD:${{ github.ref_name }}
           fi
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(grep "versionName" app/build.gradle | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)"
+          test -n "$VERSION"
+          TAG="v${VERSION}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" build-artifacts/habit-gate.apk --clobber --repo "$GITHUB_REPOSITORY"
+            echo "Updated existing release $TAG"
+          else
+            gh release create "$TAG" build-artifacts/habit-gate.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "HabitGate $TAG" \
+              --notes "変更内容は [CHANGELOG.md](https://github.com/beelip/HabitGate/blob/main/CHANGELOG.md) を参照してください。"
+          fi
