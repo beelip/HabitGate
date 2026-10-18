@@ -244,6 +244,17 @@ public final class Ui {
         return et;
     }
 
+    /** メモ用の複数行入力。Enter で改行でき、内容に応じて最大4行まで広がる。 */
+    public static EditText memoEdit(Context context, String hint) {
+        EditText et = new EditText(context);
+        et.setHint(hint);
+        et.setSingleLine(false);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setMaxLines(4);
+        style(et);
+        return et;
+    }
+
     public static EditText numberEdit(Context context, String hint, int maxValue) {
         EditText et = new EditText(context);
         et.setHint(hint);

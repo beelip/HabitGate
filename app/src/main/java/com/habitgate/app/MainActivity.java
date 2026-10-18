@@ -132,14 +132,9 @@ public class MainActivity extends ThemedActivity {
     }
 
     private void closeCurrentCycle() {
-        Models.Cycle current = db.getCurrentCycle();
-        int auto = AppUsage.autoRecordLinkedApps(this, db, current.cycleDate);
-        Models.Cycle next = db.endCurrentCycleAndStartNext();
-        ReminderScheduler.scheduleNext(this);
-        AutoSync.run(this);
+        Models.Cycle next = CycleAutoCloser.closeCycleNow(this, db);
         refreshLists();
-        String autoMessage = auto > 0 ? " / 自動計測" + auto + "件" : "";
-        Toast.makeText(this, "一日を終了しました。次の対象日: " + DateTools.formatDisplayDate(next.cycleDate) + autoMessage, Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "一日を終了しました。次の対象日: " + DateTools.formatDisplayDate(next.cycleDate), Toast.LENGTH_LONG).show();
     }
 
     private void refreshLists() {
@@ -203,58 +198,13 @@ public class MainActivity extends ThemedActivity {
         } else {
             for (Models.ReduceItem item : items) {
                 Ui.addDivider(this, reduceList);
-                LinearLayout row = Ui.vertical(this);
-                Ui.tappable(row);
-                row.setOnClickListener(v -> {
-                    Intent intent = new Intent(this, ReduceEntryActivity.class);
-                    intent.putExtra("item_id", item.id);
-                    startActivity(intent);
-                });
+                LinearLayout row = ListRows.reduceRow(this, db, item, cycle.cycleDate);
                 row.setOnLongClickListener(v -> {
                     v.startDragAndDrop(null, new View.DragShadowBuilder(v), "reduce:" + item.id, 0);
                     return true;
                 });
                 row.setOnDragListener(this::onRowDrag);
                 row.setTag("reduce:" + item.id);
-
-                TextView titleView = new TextView(this);
-                titleView.setText(item.title);
-                titleView.setTextSize(15);
-                titleView.setTypeface(Typeface.DEFAULT_BOLD);
-                titleView.setTextColor(Ui.TEXT);
-                row.addView(titleView);
-
-                int minutes;
-                String status;
-                if (item.hasLinkedApp()) {
-                    String appLabel = AppUsage.appLabel(this, item.appPackage);
-                    if (AppUsage.hasPermission(this)) {
-                        int manual = db.getReduceMinutesOn(item.title, cycle.cycleDate) - db.getReduceAutoMinutesOn(item.title, cycle.cycleDate);
-                        int measured = AppUsage.foregroundMinutesOn(this, item.appPackage, cycle.cycleDate);
-                        minutes = measured + Math.max(0, manual);
-                        status = "📱 " + appLabel + " ・ 今日 " + DateTools.formatMinutes(minutes);
-                    } else {
-                        minutes = 0;
-                        status = "📱 " + appLabel + " ・ 計測には権限が必要";
-                    }
-                } else {
-                    minutes = db.getReduceMinutesOn(item.title, cycle.cycleDate);
-                    status = "今日 " + DateTools.formatMinutes(minutes);
-                }
-                TextView statusView = new TextView(this);
-                statusView.setText(status);
-                statusView.setTextSize(13);
-                statusView.setTextColor(Ui.MUTED);
-                row.addView(statusView);
-
-                UsageBarView bar = new UsageBarView(this);
-                bar.setValues(minutes, item.gaugeMaxMinutes);
-                LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 10));
-                barLp.topMargin = Ui.dp(this, 4);
-                barLp.bottomMargin = Ui.dp(this, 4);
-                row.addView(bar, barLp);
-
                 reduceList.addView(row);
             }
         }
@@ -274,41 +224,7 @@ public class MainActivity extends ThemedActivity {
 
     private void addDoRow(LinearLayout container, Models.Task t, Models.Cycle cycle) {
         Ui.addDivider(this, container);
-        LinearLayout row = Ui.horizontal(this);
-
-        LinearLayout col = Ui.vertical(this);
-        col.addView(Ui.body(this, DateTools.formatShortDateWithWeekday(t.plannedDate) + "  " + t.title));
-        if (t.dueAt > 0) {
-            TextView dueLine = new TextView(this);
-            dueLine.setText("⏰ 期限: " + DateTools.formatDateTime(t.dueAt));
-            dueLine.setTextSize(13);
-            dueLine.setTextColor(t.dueAt < System.currentTimeMillis() ? Ui.DANGER : Ui.HINT);
-            col.addView(dueLine);
-        }
-        if (!t.note.isEmpty()) {
-            TextView noteLine = new TextView(this);
-            noteLine.setText("メモ: " + t.note);
-            noteLine.setTextSize(13);
-            noteLine.setTextColor(Ui.HINT);
-            col.addView(noteLine);
-        }
-        row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        Button carryOver = Ui.iconButton(this, "→");
-        carryOver.setContentDescription("翌日に繰り越す");
-        carryOver.setOnClickListener(v -> confirmCarryOver(t, cycle));
-        row.addView(carryOver, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        int tint = Ui.priorityTint(t.priority);
-        Ui.tappableRow(row, tint);
-        if (tint != 0) {
-            row.setPadding(Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
-        }
-        row.setOnClickListener(v -> {
-            Intent intent = new Intent(this, TaskEntryActivity.class);
-            intent.putExtra("task_id", t.id);
-            startActivity(intent);
-        });
+        LinearLayout row = ListRows.taskRow(this, db, t, cycle, this::refreshLists);
         row.setOnLongClickListener(v -> {
             if (!"manual".equals(sortMode)) {
                 Toast.makeText(this, "並べ替えは「優先順位」ソート中のみ使えます", Toast.LENGTH_SHORT).show();
@@ -366,21 +282,6 @@ public class MainActivity extends ThemedActivity {
         if (isDo) db.saveDoTaskOrder(next); else db.saveReduceItemOrder(next);
         AutoSync.run(this);
         refreshLists();
-    }
-
-    private void confirmCarryOver(Models.Task t, Models.Cycle cycle) {
-        String nextDate = DateTools.nextDay(DateTools.maxDate(t.plannedDate, cycle.cycleDate));
-        Ui.dialog(this)
-                .setTitle("翌日に繰り越しますか？")
-                .setMessage("「" + t.title + "」を " + DateTools.formatShortDateWithWeekday(nextDate) + " に移動します。")
-                .setPositiveButton("繰り越す", (dialog, which) -> {
-                    db.carryOverDoTask(t.id, nextDate);
-                    AutoSync.run(this);
-                    refreshLists();
-                    Toast.makeText(this, "繰り越しました", Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("キャンセル", null)
-                .show();
     }
 
     private void requestNotificationPermissionIfNeeded() {

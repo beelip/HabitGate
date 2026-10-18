@@ -34,6 +34,15 @@ public final class CycleAutoCloser {
         return closed;
     }
 
+    /** 手動で現在のサイクルを終了して次の日へ移る。終了後の新しいサイクルを返す。 */
+    public static Models.Cycle closeCycleNow(Context context, HabitDb db) {
+        AppUsage.autoRecordLinkedApps(context, db, db.getCurrentCycle().cycleDate);
+        Models.Cycle next = db.endCurrentCycleAndStartNext();
+        ReminderScheduler.scheduleNext(context);
+        AutoSync.run(context);
+        return next;
+    }
+
     private static long deadlineMillis(String cycleDate, int hour, int minute) {
         return DateTools.parseOrToday(cycleDate).plusDays(1).atTime(hour, minute)
                 .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();

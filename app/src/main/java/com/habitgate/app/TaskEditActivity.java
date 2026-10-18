@@ -71,7 +71,7 @@ public class TaskEditActivity extends ThemedActivity {
         addDoOptionsRow.addView(addDueButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         doAddCard.addView(addDoOptionsRow);
 
-        addDoNote = Ui.edit(this, "メモ（任意）");
+        addDoNote = Ui.memoEdit(this, "メモ（任意）");
         doAddCard.addView(addDoNote);
         LinearLayout addDoButtons = Ui.horizontal(this);
         Button addDoToday = Ui.tonalButton(this, "今日やる");
@@ -101,7 +101,7 @@ public class TaskEditActivity extends ThemedActivity {
         root.addView(Ui.section(this, "減らすことを追加"));
         LinearLayout reduceAddCard = Ui.card(this, root);
         addReduceTitle = Ui.edit(this, "例: Twitter / 夜更かし / 食べ過ぎ");
-        addReduceNote = Ui.edit(this, "メモ（任意）");
+        addReduceNote = Ui.memoEdit(this, "メモ（任意）");
         reduceAddCard.addView(addReduceTitle);
         reduceAddCard.addView(addReduceNote);
         Button addReduceButton = Ui.tonalButton(this, "追加");
