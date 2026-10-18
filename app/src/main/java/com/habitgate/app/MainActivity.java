@@ -249,7 +249,7 @@ public class MainActivity extends ThemedActivity {
 
     private TextView buildGroupHeader(String label, int count, boolean collapsed) {
         TextView header = new TextView(this);
-        header.setText(label + "（" + count + "）" + (collapsed ? "▸" : "▾"));
+        header.setText(label + "（" + count + "）" + (collapsed ? "▶" : "▼"));
         header.setTextSize(15);
         header.setTypeface(Typeface.DEFAULT_BOLD);
         header.setTextColor(Ui.TEXT);
