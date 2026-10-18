@@ -24,6 +24,8 @@ public class RecordEditActivity extends ThemedActivity {
     private MemoField recordMemo;
     private long categoryId;
     private TextView categoryText;
+    private Forms.EstimateInput estimateInput;
+    private int estimateStash = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,6 +92,9 @@ public class RecordEditActivity extends ThemedActivity {
             }));
             categoryRow.addView(categoryChange, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             inputCard.addView(categoryRow);
+
+            estimateInput = Forms.estimate(this, "見積: ", estimateStash >= 0 ? estimateStash : record.estimateMinutes);
+            inputCard.addView(estimateInput.row);
         }
 
         Forms.DurationInput duration = Forms.duration(this, "時間: ");
@@ -130,6 +135,7 @@ public class RecordEditActivity extends ThemedActivity {
     private void openDatePicker() {
         hoursText = hoursEdit.getText().toString();
         minutesText = minutesEdit.getText().toString();
+        if (estimateInput != null) estimateStash = estimateInput.totalMinutes();
         LocalDate initial = DateTools.parseOrToday(entryDate);
         new DatePickerDialog(this, Ui.pickerTheme(), (view, year, month, dayOfMonth) -> {
             entryDate = LocalDate.of(year, month + 1, dayOfMonth).format(DateTools.DATE);
@@ -139,7 +145,8 @@ public class RecordEditActivity extends ThemedActivity {
 
     private void onSave() {
         int minutes = DateTools.parseMinutes(hoursEdit.getText().toString(), minutesEdit.getText().toString());
-        db.updateRecord(record.id, minutes, recordMemo.get(), entryDate, categoryId);
+        db.updateRecord(record.id, minutes, recordMemo.get(), entryDate, categoryId,
+                estimateInput != null ? estimateInput.totalMinutes() : record.estimateMinutes);
         AutoSync.run(this);
         Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
         finish();

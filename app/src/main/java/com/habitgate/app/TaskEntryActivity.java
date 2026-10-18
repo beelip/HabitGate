@@ -241,7 +241,7 @@ public class TaskEntryActivity extends ThemedActivity {
                 Toast.makeText(this, "入力がありません", Toast.LENGTH_SHORT).show();
                 return;
             }
-            db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId);
+            db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId, task.estimateMinutes);
             AutoSync.run(this);
             Toast.makeText(this, "保存しました", Toast.LENGTH_SHORT).show();
             finish();
@@ -251,7 +251,7 @@ public class TaskEntryActivity extends ThemedActivity {
                 .setTitle("完了しますか？")
                 .setMessage("「" + task.title + "」を完了します。")
                 .setPositiveButton("完了", (dialog, which) -> {
-                    db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId);
+                    db.addRecord(HabitDb.CATEGORY_DO, task.title, Forms.mergeNotes(task.note, recordMemo.get()), minutes, entryDate, task.categoryId, task.estimateMinutes);
                     db.completeDoTask(task.id, entryDate);
                     AutoSync.run(this);
                     Toast.makeText(this, "完了しました", Toast.LENGTH_SHORT).show();

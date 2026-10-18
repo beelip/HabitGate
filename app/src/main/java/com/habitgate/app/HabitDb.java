@@ -17,7 +17,7 @@ import java.util.Set;
 public class HabitDb extends SQLiteOpenHelper {
     // データ保持のため、旧版と同じ DB 名を維持する。
     private static final String DB_NAME = "friction_habit.db";
-    private static final int DB_VERSION = 7;
+    private static final int DB_VERSION = 8;
     public static final String CATEGORY_DO = "DO";
     public static final String CATEGORY_REDUCE = "REDUCE";
 
@@ -61,7 +61,8 @@ public class HabitDb extends SQLiteOpenHelper {
                 "actual_date TEXT NOT NULL," +
                 "created_at INTEGER NOT NULL," +
                 "synced INTEGER NOT NULL DEFAULT 0," +
-                "category_id INTEGER NOT NULL DEFAULT 0" +
+                "category_id INTEGER NOT NULL DEFAULT 0," +
+                "estimate_minutes INTEGER NOT NULL DEFAULT 0" +
                 ")");
         createCyclesTable(db);
         createCategoriesTable(db);
@@ -130,6 +131,11 @@ public class HabitDb extends SQLiteOpenHelper {
         }
         if (oldVersion < 7) {
             createHolidaysTable(db);
+        }
+        if (oldVersion < 8) {
+            if (!hasColumn(db, "records", "estimate_minutes")) {
+                db.execSQL("ALTER TABLE records ADD COLUMN estimate_minutes INTEGER NOT NULL DEFAULT 0");
+            }
         }
     }
 
@@ -417,6 +423,10 @@ public class HabitDb extends SQLiteOpenHelper {
     }
 
     public long addRecord(String category, String title, String note, int durationMinutes, String actualDate, long categoryId) {
+        return addRecord(category, title, note, durationMinutes, actualDate, categoryId, 0);
+    }
+
+    public long addRecord(String category, String title, String note, int durationMinutes, String actualDate, long categoryId, int estimateMinutes) {
         ContentValues v = new ContentValues();
         v.put("category", category);
         v.put("title", title);
@@ -424,6 +434,7 @@ public class HabitDb extends SQLiteOpenHelper {
         v.put("duration_minutes", Math.max(0, durationMinutes));
         v.put("actual_date", actualDate);
         v.put("category_id", categoryId);
+        v.put("estimate_minutes", Math.max(0, estimateMinutes));
         v.put("created_at", System.currentTimeMillis());
         v.put("synced", 0);
         return getWritableDatabase().insert("records", null, v);
@@ -560,19 +571,20 @@ public class HabitDb extends SQLiteOpenHelper {
 
     public Models.Record getRecord(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records WHERE id=?",
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes FROM records WHERE id=?",
                 new String[]{String.valueOf(id)})) {
             if (c.moveToFirst()) return recordFromCursor(c);
         }
         return null;
     }
 
-    public void updateRecord(long id, int durationMinutes, String note, String actualDate, long categoryId) {
+    public void updateRecord(long id, int durationMinutes, String note, String actualDate, long categoryId, int estimateMinutes) {
         ContentValues v = new ContentValues();
         v.put("duration_minutes", Math.max(0, durationMinutes));
         v.put("note", clean(note));
         v.put("actual_date", actualDate);
         v.put("category_id", categoryId);
+        v.put("estimate_minutes", Math.max(0, estimateMinutes));
         v.put("synced", 0);
         getWritableDatabase().update("records", v, "id=?", new String[]{String.valueOf(id)});
     }
@@ -584,7 +596,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getRecords(String fromDateInclusive, String toDateInclusive) {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records " +
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes FROM records " +
                         "WHERE actual_date>=? AND actual_date<=? ORDER BY actual_date DESC, id DESC",
                 new String[]{fromDateInclusive, toDateInclusive})) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
@@ -595,7 +607,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getAllRecords() {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records ORDER BY actual_date DESC, id DESC", null)) {
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes FROM records ORDER BY actual_date DESC, id DESC", null)) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
         }
         return list;
@@ -604,7 +616,7 @@ public class HabitDb extends SQLiteOpenHelper {
     public List<Models.Record> getUnsyncedRecords() {
         ArrayList<Models.Record> list = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records WHERE synced=0 ORDER BY id ASC", null)) {
+                "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes FROM records WHERE synced=0 ORDER BY id ASC", null)) {
             while (c.moveToNext()) list.add(recordFromCursor(c));
         }
         return list;
@@ -755,7 +767,7 @@ public class HabitDb extends SQLiteOpenHelper {
     private Models.Record recordFromCursor(Cursor c) {
         return new Models.Record(
                 c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4),
-                c.getString(5), c.getLong(6), c.getInt(7) == 1, c.getLong(8));
+                c.getString(5), c.getLong(6), c.getInt(7) == 1, c.getLong(8), c.getInt(9));
     }
 
     private Models.Cycle cycleFromCursor(Cursor c) {

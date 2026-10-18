@@ -73,8 +73,9 @@ public final class Models {
         public final long createdAt;
         public final boolean synced;
         public final long categoryId;
+        public final int estimateMinutes;
 
-        public Record(long id, String category, String title, String note, int durationMinutes, String actualDate, long createdAt, boolean synced, long categoryId) {
+        public Record(long id, String category, String title, String note, int durationMinutes, String actualDate, long createdAt, boolean synced, long categoryId, int estimateMinutes) {
             this.id = id;
             this.category = category;
             this.title = title;
@@ -84,6 +85,7 @@ public final class Models {
             this.createdAt = createdAt;
             this.synced = synced;
             this.categoryId = categoryId;
+            this.estimateMinutes = estimateMinutes;
         }
     }
 

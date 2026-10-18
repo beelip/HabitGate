@@ -72,8 +72,8 @@ public final class CsvBackupManager {
                 query(db, "SELECT id,title,note,app_package,gauge_max_minutes,created_at,active,sort_order FROM reduce_items ORDER BY id ASC"));
 
         appendSection(sb, "records",
-                "id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id",
-                query(db, "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records ORDER BY id ASC"));
+                "id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes",
+                query(db, "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id,estimate_minutes FROM records ORDER BY id ASC"));
 
         appendSection(sb, "cycles",
                 "id,cycle_date,start_at,end_at,closed,synced",
@@ -381,6 +381,7 @@ public final class CsvBackupManager {
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("synced", integer(row, "synced", 0));
             v.put("category_id", lng(row, "category_id", 0));
+            v.put("estimate_minutes", integer(row, "estimate_minutes", 0));
             db.insert("records", null, v);
             count++;
         }
