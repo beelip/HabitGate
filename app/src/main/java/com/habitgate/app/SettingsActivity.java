@@ -52,7 +52,7 @@ public class SettingsActivity extends ThemedActivity {
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
 
-        root.addView(Ui.title(this, "設定"));
+        root.addView(Ui.titleWithBack(this, "設定"));
 
         root.addView(Ui.section(this, "デザイン"));
         LinearLayout designCard = Ui.card(this, root);

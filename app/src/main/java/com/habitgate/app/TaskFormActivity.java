@@ -48,7 +48,7 @@ public class TaskFormActivity extends ThemedActivity {
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "やることを編集"));
+        root.addView(Ui.titleWithBack(this, "やることを編集"));
 
         LinearLayout card = Ui.card(this, root);
 

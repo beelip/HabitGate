@@ -208,7 +208,7 @@ public class HabitDb extends SQLiteOpenHelper {
         v.put("active", 1);
         long id = db.insert("do_tasks", null, v);
         if (id >= 0) {
-            db.execSQL("UPDATE do_tasks SET sort_order = id WHERE id = ?", new Object[]{id});
+            db.execSQL("UPDATE do_tasks SET sort_order = (SELECT IFNULL(MIN(sort_order), 0) - 1 FROM do_tasks) WHERE id = ?", new Object[]{id});
         }
         return id;
     }

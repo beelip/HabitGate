@@ -41,7 +41,7 @@ public class RecordEditActivity extends ThemedActivity {
     private void buildUi() {
         String prevMemo = recordMemo == null ? record.note : recordMemo.get();
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "記録の編集"));
+        root.addView(Ui.titleWithBack(this, "記録の編集"));
 
         // 記録情報
         LinearLayout infoCard = Ui.card(this, root);

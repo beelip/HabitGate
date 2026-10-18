@@ -32,7 +32,7 @@ public class ReduceFormActivity extends ThemedActivity {
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "減らすことを編集"));
+        root.addView(Ui.titleWithBack(this, "減らすことを編集"));
 
         LinearLayout card = Ui.card(this, root);
 

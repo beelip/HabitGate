@@ -4,14 +4,17 @@ import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +30,9 @@ public class StatsActivity extends ThemedActivity {
     private Button monthChip;
     private Button dateChip;
     private GestureDetector gestureDetector;
+    private boolean completedDesc = true;
+    private boolean recordsDesc = true;
+    private boolean cyclesDesc = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +46,7 @@ public class StatsActivity extends ThemedActivity {
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > Ui.dp(StatsActivity.this, 60)) {
-                    swipeMode(dx < 0 ? 1 : -1);
+                    shiftPeriod(dx < 0 ? 1 : -1);
                     return true;
                 }
                 return false;
@@ -56,33 +62,43 @@ public class StatsActivity extends ThemedActivity {
         refresh();
     }
 
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        gestureDetector.onTouchEvent(ev);
-        return super.dispatchTouchEvent(ev);
+    /** 表示期間を前後に移動する（日=±1日、週=±7日、月=±1か月）。 */
+    private void shiftPeriod(int delta) {
+        LocalDate base = DateTools.parseOrToday(selectedDate);
+        if ("day".equals(mode)) base = base.plusDays(delta);
+        else if ("week".equals(mode)) base = base.plusDays(7L * delta);
+        else base = base.plusMonths(delta);
+        selectedDate = base.format(DateTools.DATE);
+        animatePeriodChange(delta);
     }
 
-    private void swipeMode(int delta) {
-        String[] order = {"day", "week", "month"};
-        int index = indexOf(order, mode);
-        int next = Math.max(0, Math.min(order.length - 1, index + delta));
-        if (!order[next].equals(mode)) {
-            mode = order[next];
+    /** 現在のグラフを横へ流しながらフェードアウトし、更新後に逆側からフェードインさせる。 */
+    private void animatePeriodChange(int delta) {
+        float shift = Ui.dp(this, 40);
+        chart.animate().alpha(0f).translationX(-delta * shift).setDuration(120).withEndAction(() -> {
             refresh();
-        }
+            chart.setTranslationX(delta * shift);
+            chart.animate().alpha(1f).translationX(0f).setDuration(120).start();
+        }).start();
     }
 
-    private int indexOf(String[] array, String value) {
-        for (int i = 0; i < array.length; i++) {
-            if (array[i].equals(value)) return i;
-        }
-        return 0;
+    /** 見出し（左）と時間ソート切替チップ（右）を横に並べた行。 */
+    private LinearLayout sectionWithSort(String title, boolean desc, Runnable toggle) {
+        LinearLayout header = Ui.horizontal(this);
+        header.addView(Ui.section(this, title), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button chip = Ui.chip(this, desc ? "時間 ↓" : "時間 ↑");
+        chip.setOnClickListener(v -> {
+            toggle.run();
+            refresh();
+        });
+        header.addView(chip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return header;
     }
 
     private void buildUi() {
         LinearLayout root = Ui.screen(this);
 
-        root.addView(Ui.title(this, "集計"));
+        root.addView(Ui.titleWithBack(this, "集計"));
 
         LinearLayout chips = Ui.horizontal(this);
         dayChip = Ui.chip(this, "今日");
@@ -103,11 +119,37 @@ public class StatsActivity extends ThemedActivity {
 
         LinearLayout chartCard = Ui.card(this, root);
         chart = new BarChartView(this);
-        chartCard.addView(chart, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
+        // グラフ上の左右スワイプで前後の期間へ移動する。端の ‹ › は操作できることを示す目印。
+        FrameLayout chartFrame = new FrameLayout(this);
+        chartFrame.addView(chart, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams leftMarkLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        leftMarkLp.leftMargin = Ui.dp(this, 4);
+        chartFrame.addView(swipeMark("‹"), leftMarkLp);
+        FrameLayout.LayoutParams rightMarkLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END | Gravity.CENTER_VERTICAL);
+        rightMarkLp.rightMargin = Ui.dp(this, 4);
+        chartFrame.addView(swipeMark("›"), rightMarkLp);
+        chartFrame.setOnTouchListener((v, e) -> {
+            gestureDetector.onTouchEvent(e);
+            return true;
+        });
+        chartCard.addView(chartFrame, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
         chartCard.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。"));
 
         list = Ui.vertical(this);
         root.addView(list);
+    }
+
+    private TextView swipeMark(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(18);
+        tv.setTextColor(Ui.HINT);
+        return tv;
     }
 
     private void addChip(LinearLayout parent, Button chip, boolean withMargin) {
@@ -219,10 +261,28 @@ public class StatsActivity extends ThemedActivity {
             chart.setTotals(chartTotals, chartLabels);
         }
 
-        List<Models.Record> records = db.getRecords(from, to);
-        List<Models.Cycle> cycles = db.getCycles(from, to);
-        List<Models.CompletedTask> completedTasks = db.getCompletedTaskTotals(from, to);
+        List<Models.Record> records = new ArrayList<>(db.getRecords(from, to));
+        List<Models.Cycle> cycles = new ArrayList<>(db.getCycles(from, to));
+        List<Models.CompletedTask> completedTasks = new ArrayList<>(db.getCompletedTaskTotals(from, to));
         list.removeAllViews();
+
+        // 時間ソート（日付グループは記録側で維持する）
+        Collections.sort(completedTasks, (a, b) -> completedDesc
+                ? Integer.compare(b.minutes, a.minutes)
+                : Integer.compare(a.minutes, b.minutes));
+        records.sort((a, b) -> {
+            int d = b.actualDate.compareTo(a.actualDate);
+            if (d != 0) return d;
+            return recordsDesc
+                    ? Integer.compare(b.durationMinutes, a.durationMinutes)
+                    : Integer.compare(a.durationMinutes, b.durationMinutes);
+        });
+        final long nowMillis = System.currentTimeMillis();
+        Collections.sort(cycles, (a, b) -> {
+            long da = (a.closed ? a.endAt : nowMillis) - a.startAt;
+            long db2 = (b.closed ? b.endAt : nowMillis) - b.startAt;
+            return cyclesDesc ? Long.compare(db2, da) : Long.compare(da, db2);
+        });
 
         // 合計サマリー
         list.addView(Ui.section(this, label + "の合計"));
@@ -247,7 +307,7 @@ public class StatsActivity extends ThemedActivity {
         }
 
         // 完了したタスク
-        list.addView(Ui.section(this, "完了したタスク"));
+        list.addView(sectionWithSort("完了したタスク", completedDesc, () -> completedDesc = !completedDesc));
         LinearLayout completedCard = Ui.card(this, list);
         if (completedTasks.isEmpty()) {
             completedCard.addView(Ui.note(this, "この期間に完了したタスクはありません。"));
@@ -271,7 +331,7 @@ public class StatsActivity extends ThemedActivity {
         }
 
         // 実績一覧
-        list.addView(Ui.section(this, label + "の記録"));
+        list.addView(sectionWithSort(label + "の記録", recordsDesc, () -> recordsDesc = !recordsDesc));
         LinearLayout recordsCard = Ui.card(this, list);
         if (records.isEmpty()) {
             recordsCard.addView(Ui.note(this, "この期間の実績記録はまだありません。"));
@@ -316,7 +376,7 @@ public class StatsActivity extends ThemedActivity {
         }
 
         // サイクル履歴
-        list.addView(Ui.section(this, "サイクル履歴"));
+        list.addView(sectionWithSort("サイクル履歴", cyclesDesc, () -> cyclesDesc = !cyclesDesc));
         LinearLayout cyclesCard = Ui.card(this, list);
         if (cycles.isEmpty()) {
             cyclesCard.addView(Ui.note(this, "この期間のサイクル記録はまだありません。"));

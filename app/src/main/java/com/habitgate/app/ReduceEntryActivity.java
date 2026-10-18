@@ -46,7 +46,7 @@ public class ReduceEntryActivity extends ThemedActivity {
     private void buildUi() {
         String prevMemo = recordMemo == null ? "" : recordMemo.get();
         LinearLayout root = Ui.screen(this);
-        root.addView(Ui.title(this, "実績入力"));
+        root.addView(Ui.titleWithBack(this, "実績入力"));
 
         // 項目情報
         LinearLayout infoCard = Ui.card(this, root);
