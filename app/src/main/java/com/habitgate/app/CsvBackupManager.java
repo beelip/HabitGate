@@ -64,20 +64,24 @@ public final class CsvBackupManager {
         sb.append("# habit_gate_csv_v1\n");
 
         appendSection(sb, "do_tasks",
-                "id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at",
-                query(db, "SELECT id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at FROM do_tasks ORDER BY id ASC"));
+                "id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at,category_id,estimate_minutes",
+                query(db, "SELECT id,title,note,planned_date,created_at,active,completed,completed_date,sort_order,priority,due_at,category_id,estimate_minutes FROM do_tasks ORDER BY id ASC"));
 
         appendSection(sb, "reduce_items",
                 "id,title,note,app_package,gauge_max_minutes,created_at,active,sort_order",
                 query(db, "SELECT id,title,note,app_package,gauge_max_minutes,created_at,active,sort_order FROM reduce_items ORDER BY id ASC"));
 
         appendSection(sb, "records",
-                "id,category,title,note,duration_minutes,actual_date,created_at,synced",
-                query(db, "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced FROM records ORDER BY id ASC"));
+                "id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id",
+                query(db, "SELECT id,category,title,note,duration_minutes,actual_date,created_at,synced,category_id FROM records ORDER BY id ASC"));
 
         appendSection(sb, "cycles",
                 "id,cycle_date,start_at,end_at,closed,synced",
                 query(db, "SELECT id,cycle_date,start_at,end_at,closed,synced FROM cycles ORDER BY id ASC"));
+
+        appendSection(sb, "categories",
+                "id,name,color,created_at",
+                query(db, "SELECT id,name,color,created_at FROM categories ORDER BY id ASC"));
 
         return sb.toString();
     }
@@ -146,12 +150,14 @@ public final class CsvBackupManager {
             db.delete("reduce_items", null, null);
             db.delete("records", null, null);
             db.delete("cycles", null, null);
-            db.execSQL("DELETE FROM sqlite_sequence WHERE name IN ('do_tasks','reduce_items','records','cycles')");
+            db.delete("categories", null, null);
+            db.execSQL("DELETE FROM sqlite_sequence WHERE name IN ('do_tasks','reduce_items','records','cycles','categories')");
 
             rows += insertDoTasks(db, tables.get("do_tasks"));
             rows += insertReduceItems(db, tables.get("reduce_items"));
             rows += insertRecords(db, tables.get("records"));
             rows += insertCycles(db, tables.get("cycles"));
+            rows += insertCategories(db, tables.get("categories"));
 
             // 旧CSV（sort_order列なし）からのインポート時は 0 のままだと並び順が壊れるため、id で補完する
             db.execSQL("UPDATE do_tasks SET sort_order = id WHERE sort_order = 0");
@@ -334,6 +340,8 @@ public final class CsvBackupManager {
             v.put("sort_order", integer(row, "sort_order", 0));
             v.put("priority", integer(row, "priority", 0));
             v.put("due_at", lng(row, "due_at", 0));
+            v.put("category_id", lng(row, "category_id", 0));
+            v.put("estimate_minutes", integer(row, "estimate_minutes", 0));
             db.insert("do_tasks", null, v);
             count++;
         }
@@ -372,6 +380,7 @@ public final class CsvBackupManager {
             v.put("actual_date", str(row, "actual_date", DateTools.today()));
             v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
             v.put("synced", integer(row, "synced", 0));
+            v.put("category_id", lng(row, "category_id", 0));
             db.insert("records", null, v);
             count++;
         }
@@ -390,6 +399,21 @@ public final class CsvBackupManager {
             v.put("closed", integer(row, "closed", 0));
             v.put("synced", integer(row, "synced", 0));
             db.insert("cycles", null, v);
+            count++;
+        }
+        return count;
+    }
+
+    private static int insertCategories(SQLiteDatabase db, CsvTable table) {
+        if (table == null) return 0;
+        int count = 0;
+        for (Map<String, String> row : table.rows) {
+            ContentValues v = new ContentValues();
+            putId(v, row);
+            v.put("name", str(row, "name"));
+            v.put("color", integer(row, "color", 0xFF4F46E5));
+            v.put("created_at", lng(row, "created_at", System.currentTimeMillis()));
+            db.insert("categories", null, v);
             count++;
         }
         return count;

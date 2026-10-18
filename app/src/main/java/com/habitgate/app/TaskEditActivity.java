@@ -32,6 +32,8 @@ public class TaskEditActivity extends ThemedActivity {
     private long addDueAt = 0;
     private Button addPriorityButton;
     private Button addDueButton;
+    private long addCategoryId = 0;
+    private Button addCategoryButton;
     private Button sortChip;
     private String sortMode = "manual";
     private final List<Long> doOrder = new ArrayList<>();
@@ -75,6 +77,15 @@ public class TaskEditActivity extends ThemedActivity {
         });
         addDoOptionsRow.addView(addDueButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         doAddCard.addView(addDoOptionsRow);
+
+        Ui.space(this, doAddCard, 8);
+        addCategoryButton = Ui.button(this, categoryButtonLabel(addCategoryId));
+        addCategoryButton.setOnClickListener(v -> CategoryActivity.showPicker(this, db, addCategoryId, categoryId -> {
+            addCategoryId = categoryId;
+            addCategoryButton.setText(categoryButtonLabel(addCategoryId));
+        }));
+        doAddCard.addView(addCategoryButton);
+        Ui.space(this, doAddCard, 8);
 
         addDoNote = Ui.memoEdit(this, "メモ（任意）");
         doAddCard.addView(addDoNote);
@@ -131,6 +142,11 @@ public class TaskEditActivity extends ThemedActivity {
         root.addView(back);
 
         refreshLists();
+    }
+
+    private String categoryButtonLabel(long categoryId) {
+        Models.Category category = categoryId > 0 ? db.getCategory(categoryId) : null;
+        return "カテゴリ: " + (category == null ? "なし" : category.name);
     }
 
     private void openSortDialog() {
@@ -195,13 +211,15 @@ public class TaskEditActivity extends ThemedActivity {
             Toast.makeText(this, "タスク名を入力してください", Toast.LENGTH_SHORT).show();
             return;
         }
-        db.addDoTask(title, addDoNote.getText().toString(), plannedDate, addPriority, addDueAt);
+        db.addDoTask(title, addDoNote.getText().toString(), plannedDate, addPriority, addDueAt, addCategoryId);
         addDoTitle.setText("");
         addDoNote.setText("");
         addPriority = 0;
         addDueAt = 0;
+        addCategoryId = 0;
         addPriorityButton.setText("優先度: " + DateTools.priorityLabel(addPriority));
         addDueButton.setText("期限: " + DateTools.formatDueShort(addDueAt));
+        addCategoryButton.setText(categoryButtonLabel(addCategoryId));
         AutoSync.run(this);
         refreshLists();
         Toast.makeText(this, DateTools.formatShortDateWithWeekday(plannedDate) + " に追加しました", Toast.LENGTH_SHORT).show();

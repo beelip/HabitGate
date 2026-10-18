@@ -28,6 +28,10 @@ public class MainActivity extends ThemedActivity {
     private final List<Long> reduceOrder = new ArrayList<>();
     private boolean todayCollapsed = false;
     private boolean laterCollapsed = false;
+    private String calendarMonth;
+    private boolean calendarCollapsed;
+    private LinearLayout calendarContainer;
+    private Button calendarToggle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,6 +87,23 @@ public class MainActivity extends ThemedActivity {
         stats.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
         navRow.addView(stats, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         root.addView(navRow);
+
+        // カレンダー
+        calendarMonth = DateTools.startOfMonthOf(db.getCurrentCycle().cycleDate);
+        calendarCollapsed = ReminderScheduler.prefs(this).getBoolean("calendar_collapsed", false);
+        LinearLayout calendarHeaderRow = Ui.horizontal(this);
+        calendarHeaderRow.addView(Ui.section(this, "カレンダー"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        calendarToggle = Ui.chip(this, calendarCollapsed ? "▸" : "▾");
+        calendarToggle.setContentDescription("カレンダーの表示切り替え");
+        calendarToggle.setOnClickListener(v -> {
+            calendarCollapsed = !calendarCollapsed;
+            ReminderScheduler.prefs(this).edit().putBoolean("calendar_collapsed", calendarCollapsed).apply();
+            rebuildCalendar();
+        });
+        calendarHeaderRow.addView(calendarToggle, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(calendarHeaderRow);
+        calendarContainer = Ui.vertical(this);
+        root.addView(calendarContainer);
 
         // やること
         LinearLayout doHeaderRow = Ui.horizontal(this);
@@ -209,6 +230,20 @@ public class MainActivity extends ThemedActivity {
                 reduceList.addView(row);
             }
         }
+
+        rebuildCalendar();
+    }
+
+    private void rebuildCalendar() {
+        if (calendarContainer == null) return;
+        if (calendarToggle != null) calendarToggle.setText(calendarCollapsed ? "▸" : "▾");
+        calendarContainer.removeAllViews();
+        if (calendarCollapsed) return;
+        LinearLayout card = Ui.card(this, calendarContainer);
+        card.addView(CalendarCard.build(this, db, calendarMonth, newMonth -> {
+            calendarMonth = newMonth;
+            rebuildCalendar();
+        }));
     }
 
     private TextView buildGroupHeader(String label, int count, boolean collapsed) {

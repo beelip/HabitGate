@@ -107,6 +107,19 @@ public final class DateTools {
         return h + "時間" + String.format("%02d", m) + "分";
     }
 
+    /** 見積もり時間の表示。0 以下は「なし」。0 の単位は省略（例: 1440→1日, 90→1時間30分, 45→45分）。 */
+    public static String formatEstimate(int minutes) {
+        if (minutes <= 0) return "なし";
+        int d = minutes / 1440;
+        int h = (minutes % 1440) / 60;
+        int m = minutes % 60;
+        StringBuilder sb = new StringBuilder();
+        if (d > 0) sb.append(d).append("日");
+        if (h > 0) sb.append(h).append("時間");
+        if (m > 0) sb.append(m).append("分");
+        return sb.toString();
+    }
+
     public static int parseMinutes(String hours, String minutes) {
         int h = parseNonNegative(hours);
         int m = parseNonNegative(minutes);

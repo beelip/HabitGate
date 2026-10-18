@@ -85,6 +85,13 @@ public class SettingsActivity extends ThemedActivity {
         designCard.addView(followSystemCheck);
         designCard.addView(Ui.note(this, "テーマは全画面に反映されます。「端末のダークモードと連携する」を有効にすると、端末側の設定に合わせて自動で切り替わります。"));
 
+        root.addView(Ui.section(this, "カテゴリ"));
+        LinearLayout categoryCard = Ui.card(this, root);
+        Button categoryButton = Ui.button(this, "カテゴリを編集");
+        categoryButton.setOnClickListener(v -> startActivity(new Intent(this, CategoryActivity.class)));
+        categoryCard.addView(categoryButton);
+        categoryCard.addView(Ui.note(this, "タスクに設定できるカテゴリを追加・削除できます。"));
+
         root.addView(Ui.section(this, "通知"));
         LinearLayout notifyCard = Ui.card(this, root);
         reminderButton = Ui.button(this, "通知時刻: " + ReminderScheduler.reminderTime(this));

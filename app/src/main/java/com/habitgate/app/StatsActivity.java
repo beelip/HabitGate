@@ -306,6 +306,15 @@ public class StatsActivity extends ThemedActivity {
             summaryCard.addView(Ui.note(this, "📱 計測中（未保存）の " + DateTools.formatMinutes(liveExtra) + " を含みます。一日の終了時に自動保存されます。"));
         }
 
+        // カテゴリ別（やること）
+        list.addView(Ui.section(this, "カテゴリ別（やること）"));
+        LinearLayout categoryCard = Ui.card(this, list);
+        CategoryBarChartView categoryChart = new CategoryBarChartView(this);
+        categoryChart.setData(db.getCategories(), db.getCategoryTotals(from, to));
+        categoryCard.addView(categoryChart, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 200)));
+        categoryCard.addView(Ui.note(this, "カテゴリ未設定のタスクは「その他」に集計されます。"));
+
         // 完了したタスク
         list.addView(sectionWithSort("完了したタスク", completedDesc, () -> completedDesc = !completedDesc));
         LinearLayout completedCard = Ui.card(this, list);
