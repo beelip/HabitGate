@@ -1,6 +1,5 @@
 package com.habitgate.app;
 
-import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.Intent;
@@ -307,24 +306,9 @@ public class TaskEditActivity extends ThemedActivity {
             } else if (AppUsage.hasPermission(this)) {
                 Toast.makeText(this, AppUsage.appLabel(this, packageName) + " を連携しました", Toast.LENGTH_SHORT).show();
             } else {
-                promptUsageAccess(AppUsage.appLabel(this, packageName));
+                AppUsage.promptUsageAccess(this, AppUsage.appLabel(this, packageName));
             }
         });
-    }
-
-    private void promptUsageAccess(String appLabel) {
-        Ui.dialog(this)
-                .setTitle("使用状況へのアクセスが必要です")
-                .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
-                .setPositiveButton("設定を開く", (dialog, which) -> {
-                    try {
-                        startActivity(AppUsage.usageAccessSettingsIntent());
-                    } catch (Exception e) {
-                        Toast.makeText(this, "設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("あとで", null)
-                .show();
     }
 
     private void confirmDelete(String type, String title, Runnable onConfirm) {

@@ -72,24 +72,9 @@ public class ReduceFormActivity extends ThemedActivity {
             item = db.getReduceItem(item.id);
             updateLinkText();
             if (!packageName.isEmpty() && !AppUsage.hasPermission(this)) {
-                promptUsageAccess(AppUsage.appLabel(this, packageName));
+                AppUsage.promptUsageAccess(this, AppUsage.appLabel(this, packageName));
             }
         });
-    }
-
-    private void promptUsageAccess(String appLabel) {
-        Ui.dialog(this)
-                .setTitle("使用状況へのアクセスが必要です")
-                .setMessage(appLabel + " の使用時間を自動計測するには、設定で HabitGate に「使用状況へのアクセス」を許可してください。")
-                .setPositiveButton("設定を開く", (dialog, which) -> {
-                    try {
-                        startActivity(AppUsage.usageAccessSettingsIntent());
-                    } catch (Exception e) {
-                        Toast.makeText(this, "設定画面を開けませんでした", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("あとで", null)
-                .show();
     }
 
     private void onSave() {
