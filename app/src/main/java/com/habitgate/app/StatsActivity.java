@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
@@ -30,7 +29,9 @@ public class StatsActivity extends ThemedActivity {
     private Button weekChip;
     private Button monthChip;
     private Button dateChip;
-    private GestureDetector gestureDetector;
+    private float chartDownX;
+    private float chartDownY;
+    private boolean chartHorizontalLock;
     private boolean completedDesc = true;
     private boolean recordsDesc = true;
     private boolean cyclesDesc = true;
@@ -40,19 +41,6 @@ public class StatsActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         db = new HabitDb(this);
         selectedDate = db.getCurrentCycle().cycleDate;
-        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null || e2 == null) return false;
-                float dx = e2.getX() - e1.getX();
-                float dy = e2.getY() - e1.getY();
-                if (Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > Ui.dp(StatsActivity.this, 60)) {
-                    shiftPeriod(dx < 0 ? 1 : -1);
-                    return true;
-                }
-                return false;
-            }
-        });
         buildUi();
         refresh();
     }
@@ -83,11 +71,11 @@ public class StatsActivity extends ThemedActivity {
         }).start();
     }
 
-    /** 見出し（左）と時間ソート切替チップ（右）を横に並べた行。 */
+    /** 見出し（左）と日時ソート切替チップ（右）を横に並べた行。 */
     private LinearLayout sectionWithSort(String title, boolean desc, Runnable toggle) {
         LinearLayout header = Ui.horizontal(this);
         header.addView(Ui.section(this, title), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button chip = Ui.chip(this, desc ? "時間 ↓" : "時間 ↑");
+        Button chip = Ui.chip(this, desc ? "日時 ↓" : "日時 ↑");
         chip.setOnClickListener(v -> {
             toggle.run();
             refresh();
@@ -156,15 +144,53 @@ public class StatsActivity extends ThemedActivity {
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.START | Gravity.CENTER_VERTICAL);
         leftMarkLp.leftMargin = Ui.dp(this, 4);
-        chartFrame.addView(swipeMark("‹"), leftMarkLp);
+        TextView prevMark = swipeMark("‹");
+        prevMark.setContentDescription("前の期間");
+        prevMark.setOnClickListener(v -> shiftPeriod(-1));
+        chartFrame.addView(prevMark, leftMarkLp);
         FrameLayout.LayoutParams rightMarkLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.END | Gravity.CENTER_VERTICAL);
         rightMarkLp.rightMargin = Ui.dp(this, 4);
-        chartFrame.addView(swipeMark("›"), rightMarkLp);
+        TextView nextMark = swipeMark("›");
+        nextMark.setContentDescription("次の期間");
+        nextMark.setOnClickListener(v -> shiftPeriod(1));
+        chartFrame.addView(nextMark, rightMarkLp);
         chartFrame.setOnTouchListener((v, e) -> {
-            gestureDetector.onTouchEvent(e);
-            return true;
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    chartDownX = e.getX();
+                    chartDownY = e.getY();
+                    chartHorizontalLock = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    if (!chartHorizontalLock) {
+                        float dx = e.getX() - chartDownX;
+                        float dy = e.getY() - chartDownY;
+                        // 横方向の意図が明確になったら、親 ScrollView に奪わせない
+                        if (Math.abs(dx) > Ui.dp(this, 24) && Math.abs(dx) > Math.abs(dy) * 1.2f) {
+                            chartHorizontalLock = true;
+                            v.getParent().requestDisallowInterceptTouchEvent(true);
+                        }
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP: {
+                    float dx = e.getX() - chartDownX;
+                    float dy = e.getY() - chartDownY;
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                    // フリング速度に関係なく、離した時点の移動量で判定（ゆっくりでも反応）
+                    if (Math.abs(dx) > Ui.dp(this, 50) && Math.abs(dx) > Math.abs(dy)) {
+                        shiftPeriod(dx < 0 ? 1 : -1);
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_CANCEL:
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return true;
+            }
         });
         chartCard.addView(chartFrame, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Ui.dp(this, 240)));
         chartCard.addView(Ui.note(this, "やることは積み上げ、減らすことは発生量として見ます。"));
@@ -178,6 +204,9 @@ public class StatsActivity extends ThemedActivity {
         tv.setText(text);
         tv.setTextSize(18);
         tv.setTextColor(Ui.HINT);
+        int hit = Ui.dp(this, 10);
+        tv.setPadding(hit, hit, hit, hit);
+        Ui.tappable(tv);
         return tv;
     }
 
@@ -299,9 +328,13 @@ public class StatsActivity extends ThemedActivity {
         completedTasks.sort((a, b) -> completedDesc
                 ? b.completedDate.compareTo(a.completedDate)
                 : a.completedDate.compareTo(b.completedDate));
-        records.sort((a, b) -> recordsDesc
-                ? b.actualDate.compareTo(a.actualDate)
-                : a.actualDate.compareTo(b.actualDate));
+        records.sort((a, b) -> {
+            int c = recordsDesc
+                    ? b.actualDate.compareTo(a.actualDate)
+                    : a.actualDate.compareTo(b.actualDate);
+            if (c != 0) return c;
+            return recordsDesc ? Long.compare(b.id, a.id) : Long.compare(a.id, b.id);
+        });
         cycles.sort((a, b) -> cyclesDesc
                 ? b.cycleDate.compareTo(a.cycleDate)
                 : a.cycleDate.compareTo(b.cycleDate));

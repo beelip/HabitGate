@@ -104,7 +104,7 @@ public class TaskEditActivity extends ThemedActivity {
         addDoButtons.addView(addDoNext, grow2);
         addDoButtons.addView(addDoByDate, new LinearLayout.LayoutParams(Ui.dp(this, 48), LinearLayout.LayoutParams.WRAP_CONTENT));
         doAddCard.addView(addDoButtons);
-        doAddCard.addView(Ui.note(this, "項目をタップすると編集、✏ で実績入力、長押しドラッグで並べ替えできます（並べ替えは「優先順位（手動）」ソート時）。期限ボタンの長押しでクリアできます。"));
+        doAddCard.addView(Ui.note(this, "項目をタップすると編集、✐ で実績入力、長押しドラッグで並べ替えできます（並べ替えは「優先順位（手動）」ソート時）。期限ボタンの長押しでクリアできます。"));
 
         // やること一覧
         LinearLayout doHeaderRow = Ui.horizontal(this);
@@ -273,7 +273,7 @@ public class TaskEditActivity extends ThemedActivity {
                 }
                 row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-                Button pencil = Ui.iconButton(this, "✏");
+                Button pencil = Ui.iconButton(this, "✐");
                 pencil.setContentDescription("実績入力");
                 pencil.setOnClickListener(v -> {
                     Intent intent = new Intent(this, TaskEntryActivity.class);
